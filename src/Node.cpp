@@ -25,6 +25,7 @@ uint8_t NodePeriph::comptInst = 0;
 NodePeriph::NodePeriph() // Constructeur
     : m_id(UNUSED_ID),
       m_busy(false),
+      m_reserved(0),
       m_acces(true),
       m_locoAddr(0),
       m_masqueAig(0x00),
@@ -42,6 +43,8 @@ void NodePeriph::ID(uint8_t id) { m_id = id; }
 uint8_t NodePeriph::ID() { return m_id; }
 void NodePeriph::busy(bool busy) { m_busy = busy; }
 bool NodePeriph::busy() { return m_busy; }
+void NodePeriph::reserved(uint16_t locoAddr) { m_reserved = locoAddr; };
+uint16_t NodePeriph::reserved() { return m_reserved; };
 void NodePeriph::acces(bool acces) { m_acces = acces; }
 bool NodePeriph::acces() { return m_acces; }
 void NodePeriph::locoAddr(uint16_t addr) { m_locoAddr = addr; }
@@ -57,6 +60,7 @@ byte NodePeriph::masqueAig() { return m_masqueAig; }
 Node::Node()
     : m_id(UNUSED_ID),
       m_busy(false),
+      m_reserved(0),
       m_masqueAig(0x00),
       m_SP1_idx(0),
       m_SM1_idx(0),
@@ -87,6 +91,8 @@ void Node::ID(uint16_t id) { m_id = id; }
 uint16_t Node::ID() { return m_id; }
 void Node::busy(bool busy) { m_busy = busy; }
 bool Node::busy() { return m_busy; }
+void Node::reserved(uint16_t add_loco) { m_reserved = add_loco; };
+uint16_t Node::reserved() { return m_reserved; };
 void Node::masqueAig(byte masqueAig) { m_masqueAig = masqueAig; }
 byte Node::masqueAig() { return m_masqueAig; }
 void Node::masqueAigSP2(byte masqueAigSP2) { m_masqueAigSP2 = masqueAigSP2; }

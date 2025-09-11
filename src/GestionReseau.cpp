@@ -33,10 +33,8 @@ void GestionReseau::signauxTask(void *p)
                 SignauxCmd::affiche(node->signal[i]->affiche(signalValue[i]));
                 oldValue[i] = signalValue[i];
 #ifdef debug
-                // debug.printf("[GestionReseau %d] signal value %d\n", __LINE__, node->signal[i]->affiche(signalValue[i]));
                 // debug.printf("[GestionReseau %d] signal value ", __LINE__);
                 // debug.println(node->signal[i]->affiche(signalValue[i]), BIN);
-                // debug.printf("[GestionReseau %d] Fonction signauxTask\n", __LINE__);
 #endif
             }
         }
@@ -66,8 +64,8 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
     uint8_t comptCmdLoco = 0;
 
 #ifdef debug
-    char *cantonName;
-    cantonName = new char[4];
+    // char *cantonName;
+    // cantonName = new char[4];
 #endif
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -84,7 +82,7 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
 
         // debug.printf("[GestionReseau %d] node->busy() = %d\n", __LINE__, node->busy());
 
-        if (!node->busy())
+        if (node->busy() == false)
         {
             node->sensor[horaire].state(LOW); // Desactivation des capteurs ponctuels si aucune loco reconnue
             node->sensor[antiHor].state(LOW);
@@ -103,8 +101,10 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
 
         if (node->sensor[horaire].state() && !node->sensor[antiHor].state())
             node->loco.sens(1); // Horaire
-        else if (node->sensor[antiHor].state() && !node->sensor[horaire].state())
+        if (node->sensor[antiHor].state() && !node->sensor[horaire].state())
             node->loco.sens(2); // Anti Horaire
+
+        // Serial.println(node->loco.sens());
 
         /*************************************************************************************
          * Information aupres des satellites environnants
@@ -171,14 +171,33 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
                         node->nodeP[node->SM1_idx()]->acces(),
                         node->nodeP[node->SM1_idx()]->busy());
 
-        enum : uint8_t
+        // Reserver le canton suivant
+        // if (node->loco.speed() > 0)
+        // {
+        if (node->loco.sens() == 1) // Horaire)
         {
-            Orange,
-            Rouge,
-            Vert,
-            Carre,
-            Ralentissement,
-            RRalentissement
+            CanMsg::sendMsg(0, 0xE3, 0, node->ID(),
+                            (uint8_t)node->nodeP[node->SP1_idx()]->ID(),
+                            (node->loco.address() & 0xFF00) >> 8,
+                            node->loco.address() & 0x00FF);
+        }
+        else if (node->loco.sens() == 2) // Anti Horaire
+        {
+            CanMsg::sendMsg(0, 0xE3, 0, node->ID(),
+                            (uint8_t)node->nodeP[node->SM1_idx()]->ID(),
+                            (node->loco.address() & 0xFF00) >> 8,
+                            node->loco.address() & 0x00FF);
+        }
+        // }
+
+        enum : uint16_t
+        {
+            orange,
+            rouge,
+            vert,
+            carre,
+            ralentissement,
+            rRalentissement
         };
 
         /*************************************************************************************
@@ -200,7 +219,7 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
                 // debug.printf("[GestionReseau %d] Le SP2 est acces : %s \n", __LINE__, s2access ? "true" : "false");
                 // debug.printf("[GestionReseau %d] Le SP2 est busy : %s \n", __LINE__, s2busy ? "true" : "false");
 #ifdef debug
-                strcpy(cantonName, "SP1");
+                // strcpy(cantonName, "SP1");
 #endif
                 break;
             case 1:
@@ -212,10 +231,12 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
                 // debug.printf("[GestionReseau %d] Le SM2 est acces : %s \n", __LINE__, s2access ? "true" : "false");
                 // debug.printf("[GestionReseau %d] Le SM2 est busy : %s \n", __LINE__, s2busy ? "true" : "false");
 #ifdef debug
-                strcpy(cantonName, "SM1");
+                // strcpy(cantonName, "SM1");
 #endif
                 break;
             }
+
+            // debug.printf("[GestionReseau %d] reserved %d \n", __LINE__, node->nodeP[index]->reserved());
 
             // debug.printf("[GestionReseau %d] index %d \n", __LINE__, index);
             // debug.printf("[GestionReseau %d] node->sensor[sens0].state() %d \n", __LINE__, node->sensor[sens0].state());
@@ -228,13 +249,22 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
                     // debug.printf("[GestionReseau %d] Le canton %s est accessible\n", __LINE__, cantonName);
                     if (node->nodeP[index]->busy()) // Le canton SP1/SM1 est occupé
                     {
-                        // debug.printf("[GestionReseau %d] Le canton %s est accessible mais occupe\n", __LINE__, cantonName);
-                        signalValue[i] = Rouge;
+                        Serial.println(node->nodeP[index]->ID());
+                        if (node->loco.address() > 0)
+                        {
+                            Serial.println(node->loco.address());
+                            if (node->loco.address() != node->nodeP[index]->reserved()) // Est-ce que la loco qui occupe le canton SP1/SM1 est celle qui l'a reservé ?
+                            {
+                                // debug.printf("[GestionReseau %d] Le canton %s est accessible mais occupe\n", __LINE__, cantonName);
+                                signalValue[i] = rouge;
+                            }
+                        }
                     }
+
                     else // Le canton SP1/SM1 est accessible et libre
                     {
                         // debug.printf("[GestionReseau %d] Le canton %s est accessible et libre\n", __LINE__, cantonName);
-                        signalValue[i] = Vert;
+                        signalValue[i] = vert;
 
                         if (s2access) // Le canton SP2 est-il accessible ?
                         {
@@ -242,43 +272,35 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
                             if (s2busy) // Le canton SP2 est-il occupé ?
                             {
                                 // debug.printf("[GestionReseau %d] SP2 occupe\n", __LINE__);
-                                signalValue[i] = Orange;
+                                signalValue[i] = orange;
                             }
                             else // Le canton SP2 n'est pas occupé
                             {
                                 // debug.printf("[GestionReseau %d] SP2 libre\n", __LINE__);
-                                signalValue[i] = Vert;
+                                signalValue[i] = vert;
                             }
                         }
                         else // Le canton SP2 n'est pas accessible
                         {
                             // debug.printf("[GestionReseau %d] SP2 non accessible\n", __LINE__);
-                            signalValue[i] = Orange;
+                            signalValue[i] = orange;
                         }
                     }
                 }
                 else // Le canton SP1/SM1 est n'est pas accessible
                 {
                     // debug.printf("[GestionReseau %d] Le canton %s n'est pas accessible\n", __LINE__, cantonName);
-                    signalValue[i] = Carre;
+                    signalValue[i] = carre;
                 }
             }
             else // Le canton SP1/SM1 n'existe pas
             {
                 // debug.printf("[GestionReseau %d] Le canton %s n'existe pas\n", __LINE__, cantonName);
-                signalValue[i] = Carre;
+                signalValue[i] = carre;
             }
 
-            if (node->loco.sens() == 1)
-            {
-                // debug.printf("[GestionReseau %d] node->loco.sens() %d\n", __LINE__, node->loco.sens());
-                // debug.printf("[GestionReseau %d] node->sensor[sens0].state() %d\n", __LINE__, node->sensor[sens0].state());
-                // debug.printf("[GestionReseau %d] node->sensor[sens1].state() %d\n", __LINE__, node->sensor[sens1].state());
-                // debug.printf("[GestionReseau %d] signalValue[i] %d\n", __LINE__, signalValue[i]);
-            }
-
-            static uint8_t oldSignalValue0 = 0;
-            static uint8_t oldSignalValue1 = 0;
+            static uint16_t oldSignalValue0 = 0;
+            static uint16_t oldSignalValue1 = 0;
             if (signalValue[0] != oldSignalValue0)
             {
                 lastTime = xTaskGetTickCount();
@@ -294,35 +316,45 @@ void IRAM_ATTR GestionReseau::loopTask(void *pvParameters)
             {
                 switch (signalValue[i])
                 {
-                case Carre:
-                case Rouge:
-                    // if (node->loco.sens() == 1)
-                    // {
-                    //     if (node->sensor[0].state())
-                    //     {
-                    //         if (node->sensor[1].state())
-                    //             node->loco.stop();
-                    //         else
-                    //             node->loco.speed(200); // 200/1000 = 20%
-                    //     }
-                    // }
-
-                    if (node->sensor[sens1].state())
+                case carre:
+                case rouge:
+                    // debug.printf("[GestionReseau %d] feu rouge\n", __LINE__);
+                    if (node->loco.sens() == 1) // Horaire
                     {
-                        if (node->sensor[sens0].state())
+                        if (node->sensor[1].state())
                             node->loco.stop();
                         else
                             node->loco.speed(200); // 200/1000 = 20%
                     }
-                    break;
-                case Ralentissement:
-                    if (node->loco.sens() == 1)
+
+                    if (node->loco.sens() == 2) // Anti Horaire
                     {
                         if (node->sensor[0].state())
-                            node->loco.speed(300); // 300/1000 = 30%
+                            node->loco.stop();
+                        else
+                            node->loco.speed(200); // 200/1000 = 20%
+                    }
+                    // if (node->sensor[sens1].state())
+                    // {
+                    //     if (node->sensor[sens0].state())
+                    //         node->loco.stop();
+                    //     else if (node->loco.speed() > 200)
+                    //         node->loco.speed(200); // 200/1000 = 20%
+                    // }
+                    break;
+                case ralentissement:
+                    if (node->loco.sens() == 1)
+                    {
+                        if (node->sensor[0].state() && node->loco.speed() > 200)
+                            node->loco.speed(200); // 200/1000 = 20%
+                    }
+                    if (node->loco.sens() == 2)
+                    {
+                        if (node->sensor[1].state() && node->loco.speed() > 200)
+                            node->loco.speed(200); // 200/1000 = 20%
                     }
                     break;
-                case Vert:
+                case vert:
                     // debug.println("ligne 318");
                     break;
                 }

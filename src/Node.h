@@ -29,6 +29,7 @@ class NodePeriph
 protected:
   uint8_t m_id;
   bool m_busy;
+  uint16_t m_reserved;
   bool m_acces;
   uint16_t m_locoAddr;
   byte m_masqueAig;
@@ -46,6 +47,8 @@ public:
   // Liaison *liaison[2];
   void busy(bool);
   bool busy();
+  void reserved(uint16_t);
+  uint16_t reserved();
   void acces(bool);
   bool acces();
   void locoAddr(uint16_t);
@@ -63,6 +66,7 @@ class Node : public Aig
 private:
   uint16_t m_id;
   bool m_busy;
+  uint16_t m_reserved;
   byte m_masqueAig;
   uint8_t m_SP1_idx;
   uint8_t m_SM1_idx;
@@ -86,6 +90,8 @@ public:
   uint16_t ID();
   void busy(bool);
   bool busy();
+  void reserved(uint16_t);
+  uint16_t reserved();
   void masqueAig(byte);
   byte masqueAig();
   void masqueAigSP2(byte);

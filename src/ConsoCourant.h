@@ -1,7 +1,7 @@
 /*
 
   ConsoCourant.h
-  
+
 
 
 */
@@ -41,7 +41,7 @@ void IRAM_ATTR ConsoCourant::loop(void *p)
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
   ConsoCourant *pThis = (ConsoCourant *)p;
-  
+
   for (;;)
   {
     if (digitalRead(pThis->m_pinIn))

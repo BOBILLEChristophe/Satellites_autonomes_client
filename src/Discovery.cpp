@@ -200,9 +200,6 @@ void Discovery::createAigEtCibles(void *p) // Création des aiguilles
         node->aig[index]->nodePdevieIdx(nodP1);
 
         node->m_masqueAig |= (1 << index);
-
-        // debug.printf("[Discovery %d] : Creation de l'aiguille %d; masqueAig = 0b", __LINE__, m_comptAig);
-        // debug.println(node->m_masqueAig, BIN);
         m_comptAig++;
       }
     };

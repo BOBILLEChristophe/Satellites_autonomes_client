@@ -10,6 +10,9 @@ v 0.12.0 : Plusieurs bugs corrigés pour la signalisation
 v 0.12.1 : Modification importantes des structures de message CAN
 v 0.13.0 : Mise à jour importante Ajout de fonctionnalités
 v 0.13.1 : Correction d'un bug sur les commandes d'aiguille
+v 0.13.2 : Petits ajustements
+v 0.14.0 : Evolutions majeures pour la détection et l'envoi de commandes CAN a laBox 
+v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
 
 */
 
@@ -19,7 +22,7 @@ v 0.13.1 : Correction d'un bug sur les commandes d'aiguille
 #endif
 
 #define PROJECT "Satellites autonomes (client)"
-#define VERSION "v 0.13.1"
+#define VERSION "v 0.14.1"
 #define AUTHOR "christophe BOBILLE : christophe.bobille@gmail.com"
 
 //--- Fichiers inclus
@@ -96,7 +99,7 @@ void setup()
     return;
   }
 
-  Settings::wifiOn(true);
+  //Settings::wifiOn(true);
 
   if (Settings::discoveryOn()) // Si option validee, lancement de la méthode pour le procecuss de decouverte
   {

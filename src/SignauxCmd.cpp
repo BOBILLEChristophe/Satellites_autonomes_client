@@ -22,12 +22,12 @@ void SignauxCmd::setup()
 void SignauxCmd::affiche(uint16_t data)
 {
 
-  // Envoie des 8 bits de poids fort (MSB)
+  // Envoi des 8 bits de poids fort (MSB)
   digitalWrite(m_pinVerrou, LOW);
   shiftOut(m_pinData, m_pinHorloge, LSBFIRST, data >> 8);
   digitalWrite(m_pinVerrou, HIGH);
 
-  // Envoie des 8 bits de poids faible (LSB)
+  // Envoi des 8 bits de poids faible (LSB)
   digitalWrite(m_pinVerrou, LOW);
   shiftOut(m_pinData, m_pinHorloge, LSBFIRST, data & 0xFF); 
   digitalWrite(m_pinVerrou, HIGH);

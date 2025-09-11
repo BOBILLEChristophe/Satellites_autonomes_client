@@ -51,11 +51,11 @@ void CanMsg::canReceiveMsg(void *pvParameters)
     CANMessage frameIn;
     if (ACAN_ESP32::can.receive(frameIn))
     {
-      const byte commande = (frameIn.id & 0x1fe0000) >> 17; // Code de la commande
-      const uint16_t idSatExpediteur = frameIn.id & 0xffff; // ID du satellite qui envoie
-      const bool response = (frameIn.id & 0x10000) >> 16;   // Reponse
+      const uint8_t commande = (uint8_t)((frameIn.id & 0x1fe0000) >> 17); // Code de la commande
+      const uint16_t idSatExpediteur = (uint16_t)frameIn.id & 0xffff;     // ID du satellite qui envoie
+      const bool response = (frameIn.id & 0x10000) >> 16;                 // Reponse
 #ifdef DEBUG
-      // debug.printf("\n[CanMsg %d]------ Expediteur %d : commande 0x%0X\n", __LINE__, idSatExpediteur, commande);
+                                                          // debug.printf("\n[CanMsg %d]------ Expediteur %d : commande 0x%0X\n", __LINE__, idSatExpediteur, commande);
 #endif
       if (frameIn.rtr) // Remote frame
       {
@@ -145,6 +145,17 @@ void CanMsg::canReceiveMsg(void *pvParameters)
           }
           break;
         case 0xE0:
+
+          // if (frameIn.data[0])
+          // {
+          //   Serial.print("Sat : ");
+          //   Serial.print(idSatExpediteur);
+          //   Serial.print(" busy = ");
+          //   Serial.println(frameIn.data[0]);
+          // }
+
+          // Serial.println(node->nodeP[node->SP1_idx()]->ID());
+
           /*****************************************************************************************************
            * reception periodique des data envoyees par les sat en exploitation (GestionReseau.cpp ligne 42)
            ******************************************************************************************************/
@@ -156,8 +167,8 @@ void CanMsg::canReceiveMsg(void *pvParameters)
           {
             if (idSatExpediteur == node->nodeP[node->SP1_idx()]->ID()) // L'expediteur est-il le SP1 de ce sat ?
             {
-              //debug.printf("[CanMsg %d] node->SP1_idx()->ID() : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->ID());
-              // L'expediteur est le SP1 de ce sat / ce sat est-il le SM1 de l'expediteur ?
+              // debug.printf("[CanMsg %d] node->SP1_idx()->ID() : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->ID());
+              //   L'expediteur est le SP1 de ce sat / ce sat est-il le SM1 de l'expediteur ?
               if (node->ID() == frameIn.data[2])
               {
                 // Cela veut dire que le SP1 de ce sat est accessible
@@ -169,12 +180,13 @@ void CanMsg::canReceiveMsg(void *pvParameters)
                 node->nodeP[node->SP1_idx()]->acces(false); // Le SP1 de ce sat n'est pas accessible
 
               node->nodeP[node->SP1_idx()]->busy(frameIn.data[0]);
+              node->nodeP[node->SP1_idx()]->reserved(frameIn.data[1]);
 
 #ifdef DEBUG
-              // debug.printf("[CanMsg %d] node->nodeP[node->SP1_idx()]->busy() : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->busy());
-              // debug.printf("[CanMsg %d] node->nodeP[node->SP1_idx()]->acces() : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->acces());
-              // debug.printf("[CanMsg %d] node->SP2_acces : %d\n", __LINE__, node->SP2_acces());
+              // debug.printf("[CanMsg %d] Sat %d busy : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->ID(), node->nodeP[node->SP1_idx()]->busy());
+              // debug.printf("[CanMsg %d] Sat %d acces : %d\n", __LINE__, node->nodeP[node->SP1_idx()]->ID(),  node->nodeP[node->SP1_idx()]->acces());
               // debug.printf("[CanMsg %d] node->SP2_busy : %d\n", __LINE__, node->SP2_busy());
+              // debug.printf("[CanMsg %d] node->SP2_acces : %d\n", __LINE__, node->SP2_acces());
 #endif
             }
           }
@@ -183,8 +195,8 @@ void CanMsg::canReceiveMsg(void *pvParameters)
           {
             if (idSatExpediteur == node->nodeP[node->SM1_idx()]->ID()) // L'expediteur est-il le SM1 de ce sat ?
             {
-              //debug.printf("[CanMsg %d] node->SM1_idx()->ID() : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->ID());
-              // L'expediteur est le SM1 de ce sat / ce sat est-il le SP1 de l'expediteur ?
+              // debug.printf("[CanMsg %d] node->SM1_idx()->ID() : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->ID());
+              //   L'expediteur est le SM1 de ce sat / ce sat est-il le SP1 de l'expediteur ?
               if (node->ID() == frameIn.data[1])
               {
                 // Cela veut dire que le SM1 de ce sat est accessible
@@ -196,18 +208,36 @@ void CanMsg::canReceiveMsg(void *pvParameters)
                 node->nodeP[node->SM1_idx()]->acces(false); // Le SM1 de ce sat n'est pas accessible
 
               node->nodeP[node->SM1_idx()]->busy(frameIn.data[0]);
+              node->nodeP[node->SM1_idx()]->reserved(frameIn.data[1]);
 
 #ifdef DEBUG
-              // debug.printf("[CanMsg %d] node->nodeP[node->SM1_idx()]->busy() : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->busy());
-              // debug.printf("[CanMsg %d] node->nodeP[node->SM1_idx()]->acces() : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->acces());
-              // debug.printf("[CanMsg %d] node->SM2_acces : %d\n", __LINE__, node->SM2_acces());
+              // debug.printf("[CanMsg %d] Sat %d busy : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->ID(), node->nodeP[node->SM1_idx()]->busy());
+              // debug.printf("[CanMsg %d] Sat %d acces : %d\n", __LINE__, node->nodeP[node->SM1_idx()]->ID(), node->nodeP[node->SM1_idx()]->acces());
               // debug.printf("[CanMsg %d] node->SM2_busy : %d\n", __LINE__, node->SM2_busy());
+              // debug.printf("[CanMsg %d] node->SM2_acces : %d\n", __LINE__, node->SM2_acces());
 #endif
             }
           }
           break;
 
-        case 0xE1:
+        case 0xE3:
+          /*****************************************************************************************************
+           * reservation du canton pour loco en approche sur canton précédent
+           ******************************************************************************************************/
+
+            //debug.printf("[CanMsg %d] frameIn.data[0] : %d\n", __LINE__, frameIn.data[0]);
+          if (node->ID() == frameIn.data[0])
+          {
+            //debug.printf("[CanMsg %d] frameIn.data[0] : %d\n", __LINE__, frameIn.data[0]);
+            if (node->reserved() == 0) // Si le canton n'est pas déjà reservé
+            {
+              node->reserved((frameIn.data[1] << 8) + frameIn.data[2]);
+              debug.printf("[CanMsg %d] node->reserved : %d\n", __LINE__, node->reserved());
+            }
+          }
+          break;
+
+        case 0xE5:
           /*****************************************************************************************************
            * reception de l'adresse de la locomotive
            ******************************************************************************************************/
@@ -231,7 +261,8 @@ void CanMsg::canReceiveMsg(void *pvParameters)
           /*****************************************************************************************************
            * reception d'une commande d'aiguillage
            ******************************************************************************************************/
-          if (node->ID() == (frameIn.data[0]))
+
+          if (node->ID() == frameIn.data[0])
             node->aigRun(frameIn.data[1]);
           break;
         }
