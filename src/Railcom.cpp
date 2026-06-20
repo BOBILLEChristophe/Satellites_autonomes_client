@@ -189,7 +189,7 @@ void IRAM_ATTR Railcom::setAddress(void *p)
 
   for (;;)
   {
-    address = 0;
+    address = 1;
     xQueueReceive(pThis->xQueue2, &address, pdMS_TO_TICKS(0));
     pThis->m_address = address;
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(25)); // toutes les x ms

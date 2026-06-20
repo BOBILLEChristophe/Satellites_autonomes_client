@@ -1,26 +1,24 @@
 /*
-  
-   Settings.h
+
+  Settings.h
 
 
 */
 
-#ifndef __SETTINGS__
-#define __SETTINGS__
+#pragma once
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <SPIFFS.h>
-#include <FS.h>
 #include "CanMsg.h"
-#include "CanConfig.h"
+#include "CanManager.h"
 #include "Config.h"
+#include "Debug.h"
 #include "Node.h"
+#include "Storage.h"
 
 class Settings
 {
 private:
-
   //static uint8_t nbLoco;
   static bool isMainReady;
   static String ssid_str;
@@ -39,11 +37,10 @@ public:
   static void readFile();
   // static uint8_t gNbLoco();
   // static void sNbLoco(const uint8_t);
-  static void sMainReady(bool);
+  static void mainReady(bool);
   static bool discoveryOn();
   static void discoveryOn(bool);
   static bool wifiOn();
   static void wifiOn(bool);
 };
 
-#endif

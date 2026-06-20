@@ -37,12 +37,5 @@ void IRAM_ATTR Sensor::loop(void *p)
   }
 }
 
-bool Sensor::state()
-{
-  return m_state;
-}
-
-void Sensor::state(bool state)
-{
-  m_state = state;
-}
+bool Sensor::state(){return m_state;}
+void Sensor::state(bool state){m_state = state;}

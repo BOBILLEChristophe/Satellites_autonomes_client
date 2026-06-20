@@ -25,6 +25,20 @@ void WebHandler::init(Node *node, uint16_t webPort)
 
 void WebHandler::loop()
 {
+  //-> Ajout 16/06/26 22:51
+  static uint32_t lastNotify = 0;
+
+  if (millis() - lastNotify >= 500)
+  {
+    lastNotify = millis();
+
+    if (_ws != nullptr)
+    {
+      notifyClients();
+    }
+  }
+  //-> End ajout
+
   _ws->cleanupClients();
 }
 
@@ -78,7 +92,7 @@ void WebHandler::WsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, A
 #ifdef DEBUG
         debug.printf("servoId %s\n", servoId);
         debug.printf("servoValue %d\n", servoValue);
-        debug.printf("servoName %d\n", servoName);    
+        debug.printf("servoName %d\n", servoName);
 #endif
 
         if ('0' == servoId[2])
@@ -187,6 +201,14 @@ void WebHandler::notifyClients()
   //-> https://m1cr0lab-esp32.github.io/remote-control-with-websocket/websocket-and-json/
   //-> https://arduinojson.org/v6/api/jsonobject/
 
+  //-> Ajout 16/06/26 22:52
+  if (_ws == nullptr)
+    return;
+
+  if (_ws->count() == 0)
+    return;
+  //-> End ajout
+
   StaticJsonDocument<1024> doc;
 
   doc["idNode"] = node->ID();
@@ -199,6 +221,37 @@ void WebHandler::notifyClients()
       doc[index[i]] = "null";
     else
       doc[index[i]] = node->nodeP[i]->ID();
+  }
+
+  // Locomotive
+  doc["locoSpeed"] = node->loco.speed();
+  if (node->loco.address() > 1)
+  {
+    doc["locoAddress"] = node->loco.address();
+  }
+  else
+  {
+    doc["locoAddress"] = "--";
+    doc["locoSpeed"] = "--";
+  }
+
+  doc["locoRailMode"] = node->loco.railMode(); // 2R / 3R
+  doc["locoNetworkDir"] = node->loco.sens();   // sens réel sur le réseau
+
+  switch (node->loco.direction())
+  {
+
+  case 1:
+    doc["locoDirection"] = "Avant";
+    break;
+
+  case 2:
+    doc["locoDirection"] = "Arrière";
+    break;
+
+  default:
+    doc["locoDirection"] = "--";
+    break;
   }
 
   // Aiguilles

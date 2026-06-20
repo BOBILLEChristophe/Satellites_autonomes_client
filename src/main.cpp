@@ -11,7 +11,7 @@ v 0.12.1 : Modification importantes des structures de message CAN
 v 0.13.0 : Mise à jour importante Ajout de fonctionnalités
 v 0.13.1 : Correction d'un bug sur les commandes d'aiguille
 v 0.13.2 : Petits ajustements
-v 0.14.0 : Evolutions majeures pour la détection et l'envoi de commandes CAN a laBox 
+v 0.14.0 : Evolutions majeures pour la détection et l'envoi de commandes CAN a laBox
 v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
 
 */
@@ -22,34 +22,38 @@ v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
 #endif
 
 #define PROJECT "Satellites autonomes (client)"
-#define VERSION "v 0.14.1"
+#define VERSION "v 0.21.1"
 #define AUTHOR "christophe BOBILLE : christophe.bobille@gmail.com"
 
 //--- Fichiers inclus
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include "CanMsg.h"
-#include "CanConfig.h"
+#include "CanManager.h"
 #include "Config.h"
 #ifdef CHIP_INFO
 #include "ChipInfo.h"
 #endif
-#include "ConsoCourant.h"
+#include "CurrentConsumpt.h"
+#include "Debug.h"
 #include "Discovery.h"
-#include "GestionReseau.h"
+#include "TrafficManager.h"
 #include "Node.h"
 #include "Railcom.h"
 #include "Settings.h"
 #include "SignauxCmd.h"
+#include "Storage.h"
 #include "WebHandler.h"
-#include "Wifi_fl.h"
+#include "WifiManager.h"
 #include "freertos/queue.h"
 
 // Instances
-Node *node = new Node();
+Node node;
 Railcom railcom(RAILCOM_RX, RAILCOM_TX);
-Fl_Wifi wifi;
+// TrafficManager trafficManager(&node);
+WifiManager wifi;
 WebHandler webHandler;
-ConsoCourant consoCourant;
+CurrentConsumpt currentConsumpt;
 
 // Var globale
 bool wifiOn;
@@ -78,19 +82,21 @@ void setup()
   Serial.printf(" - %s\n\n", __TIME__);
   Serial.printf("-----------------------------------\n\n");
 
-  Settings::setup(node);
+  Storage::begin(true); // Montage du système de fichiers SPIFFS
+  vTaskDelay(pdMS_TO_TICKS(100));
+  Settings::setup(&node);
   vTaskDelay(pdMS_TO_TICKS(100));
   //--- Configure ESP32 CAN
-  CanConfig::setup();
+  CanManager::setup();
   vTaskDelay(pdMS_TO_TICKS(100));
-  CanMsg::setup(node);
+  CanMsg::setup(&node);
   vTaskDelay(pdMS_TO_TICKS(100));
 
   bool err = 0;
   if (err == Settings::begin())
   {
     Serial.printf("-----------------------------------\n");
-    Serial.printf("ID Node : %d\n", node->ID());
+    Serial.printf("ID Node : %d\n", node.ID());
     Serial.printf("-----------------------------------\n\n");
   }
   else
@@ -103,28 +109,28 @@ void setup()
 
   if (Settings::discoveryOn()) // Si option validee, lancement de la méthode pour le procecuss de decouverte
   {
-    Discovery::begin(node);
-    // Settings::wifiOn(true);
+    Discovery::begin(&node);
+    Settings::wifiOn(true);
   }
   else
   {
     // Settings::wifiOn(false);
     for (byte i = 0; i < signalSize; i++)
     {
-      if (node->signal[i] == nullptr)
-        node->signal[i] = new Signal;
-      node->signal[i]->setup();
+      if (node.signal[i] == nullptr)
+        node.signal[i] = new Signal;
+      node.signal[i]->setup();
     }
     railcom.begin();
     SignauxCmd::setup();
-    GestionReseau::setup(node);
-    consoCourant.setup(node, CONSO_COURANT_PIN);
+    TrafficManager::setup(&node);
+    currentConsumpt.setup(&node, CONSO_COURANT_PIN);
   }
   //--- Wifi et web serveur
   if (Settings::wifiOn()) // Si option validee
   {
-    wifi.start();
-    webHandler.init(node, 80);
+    wifi.begin(Settings::ssid, Settings::password);
+    webHandler.init(&node, 80);
   }
 
   Serial.printf(Settings::discoveryOn() ? "[Discovery] : on\n" : "[Discovery] : off\n");
@@ -138,6 +144,13 @@ void setup()
   Serial.println("Ne doit pas s'afficher !");
 #endif
   wifiOn = Settings::wifiOn();
+
+  ArduinoOTA.setHostname("satellite_client");
+  ArduinoOTA.onStart([]() { LOG_INFO("OTA start"); });
+  ArduinoOTA.onEnd([]() { LOG_INFO("OTA end"); });
+  ArduinoOTA.onError([](ota_error_t error){ LOG_ERROR("OTA error %u", error); });
+  ArduinoOTA.begin();
+
 } // ->End setup
 
 /*-------------------------------------------------------------
@@ -151,24 +164,27 @@ void loop()
   //******************** Ecouteur page web **********************************
 
   if (wifiOn)          // Si option validée
+  {
+    ArduinoOTA.handle();
     webHandler.loop(); // ecoute des ports web 80 et 81
+  }
 
   if (!Settings::discoveryOn()) // Si option non validée
   {
     //************************* Railcom ****************************************
-
-    if (railcom.address() && node->busy())
+    // if (railcom.address() && node.busy())
+    // {
+    node.loco.address(railcom.address());
+    // }
+    if (node.loco.address() != oldAddress)
     {
-      node->loco.address(railcom.address());
+      if (node.loco.address() > 1)
+        LOG_INFO("Railcom - Adresse de loco : %d", node.loco.address());
+      else
+        LOG_INFO("Railcom - Pas de loco");
+      oldAddress = node.loco.address();
     }
   }
-#ifdef debug
-  if (node->loco.address() != oldAddress)
-  {
-    debug.printf("[Main %d] Railcom - Numero de loco : %d\n", __LINE__, node->loco.address());
-    oldAddress = node->loco.address();
-  }
-#endif
   //**************************************************************************
   vTaskDelay(pdMS_TO_TICKS(50));
 } // ->End loop

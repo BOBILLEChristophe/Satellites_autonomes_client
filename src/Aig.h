@@ -5,17 +5,18 @@
 
 */
 
-#ifndef __AIG_H__
-#define __AIG_H__
+#pragma once
 
 #include <Arduino.h>
 #include <Servo.h>
 #include "Config.h"
+#include "Debug.h"
 
 class Aig : public Servo
 {
 protected:
   uint8_t m_id;
+  bool m_active = false;
   uint16_t m_posDroit;
   uint16_t m_posDevie;
   uint16_t m_minPos;
@@ -31,9 +32,13 @@ protected:
   uint8_t m_nodePdroitIdx;
   uint8_t m_nodePdevieIdx;
 
+ 
 public:
   Aig();
   ~Aig();
+  void active(bool v) { m_active = v; }
+  bool active() const { return m_active; }
+  void reset(); // remet champs à défaut
   void setup();
   void move(const uint16_t);
   void pin(const byte);
@@ -58,6 +63,5 @@ public:
   uint8_t nodePdroitIdx() const;
   void nodePdevieIdx(const uint8_t);
   uint8_t nodePdevieIdx() const;
+  static void taskGoTo(void *p);
 };
-
-#endif

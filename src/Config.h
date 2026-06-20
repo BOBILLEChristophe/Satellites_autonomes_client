@@ -18,7 +18,7 @@
 
 
 /* ----- Debug   -------------------*/
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define debug Serial
 #endif
@@ -61,7 +61,7 @@ const uint8_t sensorSize = 2;
 const uint8_t signalSize = 2;
 
 /* ----- Railcom -------------------*/
-#define NB_ADDRESS_TO_COMPARE 100 // Nombre de valeurs à comparer pour obtenir l'adresse de la loco
+#define NB_ADDRESS_TO_COMPARE 20 // Nombre de valeurs à comparer pour obtenir l'adresse de la loco
 #define RAILCOM_RX GPIO_NUM_0
 #define RAILCOM_TX GPIO_NUM_17
 

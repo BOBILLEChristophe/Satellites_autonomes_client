@@ -6,6 +6,7 @@
 */
 
 #include "SignauxCmd.h"
+#include "Debug.h"
 
 gpio_num_t SignauxCmd::m_pinVerrou(GPIO_NUM_18);
 gpio_num_t SignauxCmd::m_pinHorloge(GPIO_NUM_5);
@@ -21,6 +22,7 @@ void SignauxCmd::setup()
 
 void SignauxCmd::affiche(uint16_t data)
 {
+  //LOG_INFO("affiche 0x%0x\n", data);
 
   // Envoi des 8 bits de poids fort (MSB)
   digitalWrite(m_pinVerrou, LOW);
@@ -29,7 +31,7 @@ void SignauxCmd::affiche(uint16_t data)
 
   // Envoi des 8 bits de poids faible (LSB)
   digitalWrite(m_pinVerrou, LOW);
-  shiftOut(m_pinData, m_pinHorloge, LSBFIRST, data & 0xFF); 
+  shiftOut(m_pinData, m_pinHorloge, LSBFIRST, data & 0xFF);
   digitalWrite(m_pinVerrou, HIGH);
 
   // Debug pour afficher la valeur envoyée

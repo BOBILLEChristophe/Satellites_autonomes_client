@@ -25,11 +25,11 @@ uint8_t NodePeriph::comptInst = 0;
 NodePeriph::NodePeriph() // Constructeur
     : m_id(UNUSED_ID),
       m_busy(false),
-      m_reserved(0),
+      m_reservedBy(0),
       m_acces(true),
-      m_locoAddr(0),
-      m_masqueAig(0x00),
-      m_signal(0)
+      m_locoAddr(1), // DCC addresse 0 broadcast
+      m_masqueAig(0x00)
+// m_signal(0)
 {
   ++comptInst;
 }
@@ -43,8 +43,8 @@ void NodePeriph::ID(uint8_t id) { m_id = id; }
 uint8_t NodePeriph::ID() { return m_id; }
 void NodePeriph::busy(bool busy) { m_busy = busy; }
 bool NodePeriph::busy() { return m_busy; }
-void NodePeriph::reserved(uint16_t locoAddr) { m_reserved = locoAddr; };
-uint16_t NodePeriph::reserved() { return m_reserved; };
+void NodePeriph::reservedBy(uint16_t locoAddr) { m_reservedBy = locoAddr; };
+uint16_t NodePeriph::reservedBy() { return m_reservedBy; };
 void NodePeriph::acces(bool acces) { m_acces = acces; }
 bool NodePeriph::acces() { return m_acces; }
 void NodePeriph::locoAddr(uint16_t addr) { m_locoAddr = addr; }
@@ -60,7 +60,7 @@ byte NodePeriph::masqueAig() { return m_masqueAig; }
 Node::Node()
     : m_id(UNUSED_ID),
       m_busy(false),
-      m_reserved(0),
+      m_reservedBy(0),
       m_masqueAig(0x00),
       m_SP1_idx(0),
       m_SM1_idx(0),
@@ -70,8 +70,17 @@ Node::Node()
       m_SM2_busy(false),
       m_masqueAigSP2(0x00),
       m_masqueAigSM2(0x00),
-      m_maxSpeed(128),
-      m_sensMarche(0)
+      m_maxSpeed(1000),
+      m_sensMarche(0),
+      m_pendingLocoCmd(false),
+      m_pendingLocoAddr(0),
+      m_pendingLocoSpeed(0),
+      m_ackLocoCmd(false),
+      m_pendingLocoSentAt(0),
+      m_pendingLocoRetry(0),
+      m_trafficState(0),
+      m_reservedSens(0),
+      m_reservedAt(0)
 {
   for (byte i = 0; i < nodePsize; i++)
     this->nodeP[i] = nullptr;
@@ -83,6 +92,8 @@ Node::Node()
   sensor[0].setup(CAPT_PONCT_ANTIHOR_PIN, CAPT_PONCT_TEMPO, INPUT_PULLUP);
   sensor[1].setup(CAPT_PONCT_HORAIRE_PIN, CAPT_PONCT_TEMPO, INPUT_PULLUP);
   // sensor[2].setup(DETECT_PRES_CONSO_COURANT_PIN, 50, INPUT_PULLUP);
+  Loco loco;
+  Loco reservedLoco;
 }
 
 // Node::~Node() {} // Destructeur
@@ -91,8 +102,9 @@ void Node::ID(uint16_t id) { m_id = id; }
 uint16_t Node::ID() { return m_id; }
 void Node::busy(bool busy) { m_busy = busy; }
 bool Node::busy() { return m_busy; }
-void Node::reserved(uint16_t add_loco) { m_reserved = add_loco; };
-uint16_t Node::reserved() { return m_reserved; };
+void Node::reservedBy(uint16_t addLoco) { m_reservedBy = addLoco; }
+uint16_t Node::reservedBy() { return m_reservedBy; }
+void Node::clearReservation() { m_reservedBy = 1; }
 void Node::masqueAig(byte masqueAig) { m_masqueAig = masqueAig; }
 byte Node::masqueAig() { return m_masqueAig; }
 void Node::masqueAigSP2(byte masqueAigSP2) { m_masqueAigSP2 = masqueAigSP2; }
@@ -111,71 +123,41 @@ void Node::SM2_acces(bool acces) { m_SM2_acces = acces; }
 bool Node::SM2_acces() { return m_SM2_acces; }
 void Node::SM2_busy(bool busy) { m_SM2_busy = busy; }
 bool Node::SM2_busy() { return m_SM2_busy; }
-void Node::maxSpeed(uint8_t maxSpeed) { m_maxSpeed = maxSpeed; }
-uint8_t Node::maxSpeed() { return m_maxSpeed; }
+void Node::maxSpeed(uint16_t maxSpeed) { m_maxSpeed = maxSpeed; }
+uint16_t Node::maxSpeed() const { return m_maxSpeed; }
 void Node::sensMarche(uint8_t sensMarche) { m_sensMarche = sensMarche; }
 uint8_t Node::sensMarche() { return m_sensMarche; }
+void Node::trafficState(uint8_t state) { m_trafficState = state; }
+uint8_t Node::trafficState() const { return m_trafficState; }
+void Node::reservedSens(uint8_t sens) { m_reservedSens = sens; }
+uint8_t Node::reservedSens() const { return m_reservedSens; }
+void Node::reservedAt(uint32_t t) { m_reservedAt = t; }
+uint32_t Node::reservedAt() const { return m_reservedAt; }
 
 void Node::aigRun(byte idx)
 {
-  if (!(this->aig[idx]->isRunning()))
+  // Sécurité index + pointeur
+  if (idx >= aigSize)
+    return;
+  if (this->aig[idx] == nullptr)
+    return;
+
+  // Si déjà en cours, on sort
+  if (this->aig[idx]->isRunning())
   {
-    if (this->aig[idx]->posDroit() != this->aig[idx]->posDevie())
-    {
-      Node *pThis = (Node *)this->aig[idx];
-      TaskHandle_t aigGoToHandle = NULL;
-      xTaskCreate(this->aigGoTo, "goTo", 2 * 1024, pThis, 4, &aigGoToHandle); // Création de la tâche
-    }
+    LOG_INFO("Manoeuvre en cours !");
+    return;
   }
-#ifdef DEBUG
-  else
-    debug.println("Manoeuvre en cours !");
-#endif
-}
+  // Si posDroit == posDevie, aucun mouvement utile
+  if (this->aig[idx]->posDroit() == this->aig[idx]->posDevie())
+    return;
 
-void Node::aigGoTo(void *p)
-{
-  Node *pThis = (Node *)p;
-
-  if ((pThis->m_posDroit < pThis->m_posDevie) && (pThis->m_curPos == pThis->m_posDevie))
-    pThis->m_sens = 0;
-  if ((pThis->m_posDroit < pThis->m_posDevie) && (pThis->m_curPos == pThis->m_posDroit))
-    pThis->m_sens = 1;
-  if ((pThis->m_posDevie < pThis->m_posDroit) && (pThis->m_curPos == pThis->m_posDevie))
-    pThis->m_sens = 1;
-  if ((pThis->m_posDevie < pThis->m_posDroit) && (pThis->m_curPos == pThis->m_posDroit))
-    pThis->m_sens = 0;
-
-  if (pThis->m_speed < 1000 && pThis->m_speed > 10000)
-    pThis->m_speed = 5000;
-
-  pThis->run(true);
-
-  for (;;)
-  {
-    if (pThis->isRunning())
-    {
-      if (pThis->m_sens == 0)
-        pThis->m_curPos--;
-      else
-        pThis->m_curPos++;
-      pThis->writeMicroseconds(pThis->m_curPos);
-      if (pThis->m_curPos == pThis->m_posDevie || pThis->m_curPos == pThis->m_posDroit)
-        pThis->run(false);
-      if (pThis->m_curPos == pThis->m_posDroit)
-        pThis->m_estDroit = true;
-      else if (pThis->m_curPos == pThis->m_posDevie)
-        pThis->m_estDroit = false;
-      delayMicroseconds(pThis->m_speed);
-    }
-    else
-    {
-#ifdef DEBUG
-      debug.printf("m_curPos : %d\n", pThis->m_curPos);
-      debug.printf("m_speed : %d\n", pThis->m_speed);
-      debug.println("vTaskDelete");
-#endif
-      vTaskDelete(NULL);
-    }
-  }
+  // Lance la tâche : param = Aig*
+  BaseType_t ok = xTaskCreate(
+      Aig::taskGoTo,
+      "AigGoTo",
+      2048,
+      (void *)this->aig[idx],
+      1,
+      NULL);
 }

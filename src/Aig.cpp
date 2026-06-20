@@ -19,9 +19,9 @@ Aig::Aig() : m_posDroit(1500),
              m_run(false),
              m_sens(HIGH),
              m_curPos(0),
-             m_speed(AIG_SPEED){};
+             m_speed(AIG_SPEED) {};
 
-Aig::~Aig(){};
+Aig::~Aig() {};
 
 void Aig::setup()
 {
@@ -82,3 +82,46 @@ void Aig::nodePdroitIdx(const uint8_t nodePdroitIdx) { m_nodePdroitIdx = nodePdr
 uint8_t Aig::nodePdroitIdx() const { return m_nodePdroitIdx; }
 void Aig::nodePdevieIdx(const uint8_t nodePdevieIdx) { m_nodePdevieIdx = nodePdevieIdx; }
 uint8_t Aig::nodePdevieIdx() const { return m_nodePdevieIdx; }
+
+void Aig::taskGoTo(void *p)
+{
+  Aig *a = static_cast<Aig *>(p);
+  if (!a) vTaskDelete(NULL);
+
+  // Bornage vitesse
+  if (a->m_speed < 1000 || a->m_speed > 10000)
+    a->m_speed = 5000;
+
+  // Déterminer la cible : si on est sur droit, aller sur dévié, sinon aller sur droit
+  const uint16_t target = (a->m_curPos == a->m_posDroit) ? a->m_posDevie : a->m_posDroit;
+
+  // Déterminer le sens d'incrémentation pour aller vers target
+  // (si target > curPos => +1 sinon -1)
+  const int8_t step = (target > a->m_curPos) ? +1 : -1;
+
+  a->run(true);
+
+  for (;;)
+  {
+    if (!a->isRunning())
+    {
+      LOG_INFO("Position : %d\n", a->m_curPos);
+      LOG_INFO("Speed : %d\n", a->m_speed);
+      vTaskDelete(NULL);
+    }
+
+    // Avance d’un micro-pas
+    a->m_curPos = (uint16_t)((int)a->m_curPos + step);
+    a->writeMicroseconds(a->m_curPos);
+
+    // Arrivé ?
+    if (a->m_curPos == target)
+    {
+      a->m_estDroit = (target == a->m_posDroit);
+      a->run(false);
+      continue;
+    }
+
+    delayMicroseconds(a->m_speed);
+  }
+}

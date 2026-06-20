@@ -1,230 +1,171 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-<title>Satellites autonomes (client)</title>
-<!--Version du 12/01/2023 -13:16-->
-<meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8" />
-<link rel="icon" type="image/png" sizes="16X16"  href="favicon.png">
-<link rel="stylesheet" type="text/css" href="w3.css">
-<script src="script.js" type="text/javascript"></script>
-<style>
-div {
-	margin-top: 50px;
-	margin-bottom: 50px;
-}
-.container {
-	/*display: block;*/
-	position: relative;
-	padding-left: 35px;
-	margin-bottom: 12px;
-	cursor: pointer;
-	font-size: 22px;
-	-webkit-user-select: none;
-	-moz-user-select: none;
-	-ms-user-select: none;
-	user-select: none;
-}
-/* Hide the browser's default checkbox */
-.container input {
-	position: absolute;
-	opacity: 0;
-	cursor: pointer;
-	height: 0;
-	width: 0;
-}
-/* Create a custom checkbox */
-.checkmark {
-	position: absolute;
-	top: 0;
-	left: 0;
-	height: 25px;
-	width: 25px;
-	background-color: #eee;
-}
-/* On mouse-over, add a grey background color */
-.container:hover input ~ .checkmark {
-	background-color: #ccc;
-}
-/* When the checkbox is checked, add a blue background */
-.container input:checked ~ .checkmark {
-	background-color: #2196F3;
-}
-/* Create the checkmark/indicator (hidden when not checked) */
-.checkmark:after {
-	content: "";
-	position: absolute;
-	display: none;
-}
-/* Show the checkmark when checked */
-.container input:checked ~ .checkmark:after {
-	display: block;
-}
-/* Style the checkmark/indicator */
-.container .checkmark:after {
-	left: 9px;
-	top: 5px;
-	width: 5px;
-	height: 10px;
-	border: solid white;
-	border-width: 0 3px 3px 0;
-	-webkit-transform: rotate(45deg);
-	-ms-transform: rotate(45deg);
-	transform: rotate(45deg);
-}
-</style>
-<!-- <script>
-  setTimeout(function(){
-      location.reload();
-  }, 10000); // Recharge la page toutes les 60 secondes (en millisecondes)
-</script> -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Satellites autonomes - Node</title>
+
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="/w3.css" />
+  <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    /* mini styles safe (tu peux les déplacer dans style.css si tu veux) */
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .tiny { font-size: 12px; opacity: 0.85; }
+    .pill { display:inline-block; padding:2px 8px; border-radius: 999px; }
+    .pill-ok { background:#e9f7ef; color:#1e7e34; }
+    .pill-warn { background:#fff3cd; color:#856404; }
+    .pill-bad { background:#f8d7da; color:#721c24; }
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .card { border-radius: 10px; }
+    input[type="range"]{ width:100%; }
+    .btn-row > * { margin-right: 8px; margin-bottom: 6px; }
+    .value { font-weight: 700; }
+    .label { opacity: 0.85; }
+    .sep { height:1px; background: rgba(0,0,0,0.08); margin: 10px 0; }
+  </style>
 </head>
 
-<body>
-<!--Titre-->
-<div class="w3-card w3-blue w3-padding-small w3-center">
-  <h3>Locoduino : Satellites autonomes</h3>
-</div>
-<p class="w3-margin w3-center w3-padding-12"> <span id='messages' class="w3-wide w3-text-red"></span> </p>
-<div class="w3-margin w3-card w3-padding-24">
-  <table width="80%" align="center">
-    <tr>
-      <td width="30%">Satellite ID : </td>
-      <td width="20%"><input id="idNode" name="idNode" size="10" type="text" value="10"></td>
-       <td width="20%"></td>
-      <td width="20%"></td>
-    </tr>
-     <tr>
-      <td>Wifi :</td>
-      <td><input name="wifi_on" type="checkbox" id="wifi_on" onclick="wifi_on(this)" size="10" checked></td>
-      <td>Discovery : </td>
-      <td><input name="discovery_on" type="checkbox" id="discovery_on" size="10" checked onclick="discovery_on(this)"></td>
-      </tr>
-     <tr>
-      <td>Sens de la marche :</td>
-      <td><input type="radio" id="horaire" name="sensMarche" value="horaire"/>
-    <label for="horaire">Horaire</label></td>
-       <td><input type="radio" id="antihoraire" name="sensMarche" value="antihoraire"/>
-    <label for="antihoraire">Anti horaire</label></td>
-      <td><input type="radio" id="indifferent" name="sensMarche" value="indifferent" checked />
-    <label for="indifferent">Indifférent</label></td>
-    </tr>
-    <tr>
-      <td>Vitesse maxi :</td>
-      <td><input name="maxSpeed" type="number" id="maxSpeed" value="128" size="5"></td>
-      <td></td>
-      <td></td>
-    </tr>
-     <tr>
-      <td>p00 :</td>
-      <td><input name="p00" type="text" id="p00" value="null" size="10" readonly></td>
-      <td>m00 : </td>
-      <td><input name="m00" type="text" id="m00" value="null" size="10" readonly></td>
-    </tr>
-    <tr>
-      <td>p01 :</td>
-      <td><input name="p01" type="text" id="p01" value="null" size="10" readonly></td>
-      <td>m01 :</td>
-      <td><input name="m01" type="text" id="m01" value="null" size="10" readonly></td>
-    </tr>
-    <tr>
-      <td>p10 :</td>
-      <td><input name="p10" type="text" id="p10" value="null" size="10" readonly></td>
-      <td>m10 :</td>
-      <td><input name="m10" type="text" id="m10" value="null" size="10" readonly></td>
-    </tr>
-    <tr>
-      <td>p11 :</td>
-      <td><input name="p11" type="text" id="p11" value="null" size="10" readonly></td>
-      <td>m11 :</td>
-      <td><input name="m11" type="text" id="m11" value="null" size="10" readonly></td>
-    </tr>
-  </table>
+<body class="w3-light-grey">
+
+  <div class="w3-container w3-padding-16">
+    <div class="w3-card w3-white w3-padding card">
+      <div class="w3-row">
+        <div class="w3-col s12 m8">
+          <h2 class="w3-margin-0">Satellite autonome</h2>
+          <div class="tiny">
+            Node <span class="mono value" id="idNode">--</span>
+            <span class="w3-margin-left">WS :</span>
+            <span id="wsStatus" class="pill pill-warn">connexion…</span>
+            <span class="w3-margin-left">Dernier msg :</span>
+            <span class="mono" id="lastMsg">--</span>
+          </div>
+        </div>
+        <div class="w3-col s12 m4 w3-right-align">
+          <div class="btn-row">
+            <button class="w3-button w3-blue w3-round" id="btnSave">Sauver</button>
+            <button class="w3-button w3-orange w3-round" id="btnRestart">Redémarrer</button>
+          </div>
+          <div class="tiny">Version UI : v2</div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="grid-3">
+        <div>
+          <div class="label">WiFi</div>
+          <label class="w3-text-dark-grey">
+            <input class="w3-check" type="checkbox" id="wifi_on" />
+            Actif
+          </label>
+        </div>
+
+        <div>
+          <div class="label">Discovery</div>
+          <label class="w3-text-dark-grey">
+            <input class="w3-check" type="checkbox" id="discovery_on" />
+            Actif
+          </label>
+        </div>
+
+        <div>
+          <div class="label">Throttle (ms)</div>
+          <input type="range" min="5" max="120" step="5" value="120" id="throttleRange" />
+          <div class="tiny">Valeur : <span class="mono value" id="throttleVal">120</span> ms</div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+
+
+
+<div class="w3-card w3-white w3-padding w3-margin-bottom card">
+  <h4>Locomotive du canton</h4>
+
+  <div class="grid-3">
+    <div>
+      <div class="label">Adresse</div>
+      <div class="mono value" id="locoAddress">--</div>
+    </div>
+
+    <div>
+      <div class="label">Vitesse</div>
+      <div class="mono value" id="locoSpeed">--</div>
+    </div>
+
+    <div>
+      <div class="label">Direction</div>
+      <div class="mono value" id="locoDirection">--</div>
+    </div>
+
+     <div>
+      <div class="label">Sens de roulage</div>
+      <div class="mono value" id="locoSens">--</div>
+    </div>
+  </div>
 </div>
 
-<!--cibles signaux-->
-<div class="w3-margin w3-card w3-padding-24">
-  <table width="80%" align="center">
-  <tr>
-       <td width="15%">Types de cibles</td>
-       <td width="35%"></td>
-       <td width="15%"></td>
-       <td width="35%"></td>
-    </tr>
-    <tr>
-      <td>Horaire :</td>
-       <td><img id="imageHoraire" src="" alt=""></td>
-       <td>Anti horaire :</td>
-       <td><img id="imageAntiHor" src="" alt=""></td>
-    </tr>
 
-  </table>
-</div>
 
-<!--servos-->
-<div class="w3-margin w3-card w3-padding-24">
-  <table width="80%" align="center">
-    <tr>
-      <td>Aiguilles</td>
-      <td>Etat</td>
-      <td>Aig droite</td>
-      <td>Aig déviée</td>
-      <td>Vitesse</td>
-      <td></td>
-    </tr>
-     <tr>
-      <td>Servo 0 :</td>
-      <td><input id="s0" name="" size="5" type="text" value="null"></td>
-      <td><input id="s00" name="0" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s01" name="0" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s02" name="0" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest0" name="0" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-    <tr>
-      <td>Servo 1 :</td>
-      <td><input id="s1" name="" size="5" type="text" value="null"></td>
-      <td><input id="s10" name="1" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s11" name="1" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s12" name="1" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest1" name="1" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-    <tr>
-      <td>Servo 2 :</td>
-      <td><input id="s2" name="" size="5" type="text" value="null"></td>
-      <td><input id="s20" name="2" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s21" name="2" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s22" name="2" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest2" name="2" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-    <td>Servo 3 :</td>
-    <td><input id="s3" name="" size="5" type="text" value="null"></td>
-      <td><input id="s30" name="3" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s31" name="3" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s32" name="3" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest3" name="3" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-    <td>Servo 4 :</td>
-    <td><input id="s4" name="" size="5" type="text" value="null"></td>
-      <td><input id="s40" name="4" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s41" name="4" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s42" name="4" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest4" name="4" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-    <td>Servo 5 :</td>
-    <td><input id="s5" name="" size="5" type="text" value="null"></td>
-      <td><input id="s50" name="5" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s51" name="5" size="40" type="number" value="1500" min="800" max="2100" onChange="servoSettings(this)"></td>
-      <td><input id="s52" name="5" size="40" type="number" value="5" min="1" max="10" onChange="servoSettings(this)"></td>
-      <td><button id="servoTest5" name="5" onclick="servoTest(this)" class="w3-button w3-green w3-large w3-ripple" style="">test</button></td>
-    </tr>
-  </table>
+
+      <div class="grid-2">
+        <div class="w3-card w3-white w3-padding card">
+          <h4 class="w3-margin-top-0">Réseau voisins</h4>
+          <div class="grid-2 tiny">
+            <div><span class="mono">p00</span> : <span class="mono value" id="p00">--</span></div>
+            <div><span class="mono">p01</span> : <span class="mono value" id="p01">--</span></div>
+            <div><span class="mono">p10</span> : <span class="mono value" id="p10">--</span></div>
+            <div><span class="mono">p11</span> : <span class="mono value" id="p11">--</span></div>
+            <div><span class="mono">m00</span> : <span class="mono value" id="m00">--</span></div>
+            <div><span class="mono">m01</span> : <span class="mono value" id="m01">--</span></div>
+            <div><span class="mono">m10</span> : <span class="mono value" id="m10">--</span></div>
+            <div><span class="mono">m11</span> : <span class="mono value" id="m11">--</span></div>
+          </div>
+        </div>
+
+        <div class="w3-card w3-white w3-padding card">
+          <h4 class="w3-margin-top-0">Signalisation</h4>
+
+          <div class="grid-2">
+            <div>
+              <div class="label">Cible horaire</div>
+              <img id="imgHoraire" src="/cible_0.jpg" alt="cible horaire" style="max-width:100%; border-radius:10px;">
+            </div>
+            <div>
+              <div class="label">Cible anti-horaire</div>
+              <img id="imgAntiHor" src="/cible_0.jpg" alt="cible anti-horaire" style="max-width:100%; border-radius:10px;">
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="grid-2 tiny">
+            <div>sensMarche : <span class="mono value" id="sensMarche">--</span></div>
+            <div>maxSpeed : <span class="mono value" id="maxSpeedValue">--</span></div>
+          </div>
+
+          <div class="w3-margin-top">
+            <div class="label">Max Speed</div>
+            <input type="range" min="0" max="1000" step="25" value="600" id="maxSpeedRange" />
+          </div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="w3-card w3-white w3-padding card">
+        <h4 class="w3-margin-top-0">Aiguilles</h4>
+        <div class="tiny w3-text-grey">Réglage positions + vitesse. “Tester” déclenche un mouvement grandeur réelle.</div>
+
+        <div id="servoContainer" class="w3-margin-top"></div>
+      </div>
+
+    </div>
   </div>
 
-<!--boutons-->
-<div class="w3-margin w3-card w3-padding-24" style="text-align: center">
-<button id="save" name="save" onclick="save(this)" class="w3-button w3-green w3-large w3-ripple" style="width:30%;">save</button>
-<button id="restartEsp" name="restartEsp" onclick="restartEsp(this)" class="w3-button w3-red w3-large w3-ripple" style="width:30%;">restart ESP</button>
-</div>
-<div><a href="https://alkans.fr/locoduino/satellites_v2/document-pedagogique-signaux-regimes-exploitation-v1.pdf" target="_blank">Signaux :</a></div>
-<div id="rawData" class="w3-margin w3-card w3-padding-24">Raw data</div>
+  <script src="/script.js"></script>
 </body>
 </html>
