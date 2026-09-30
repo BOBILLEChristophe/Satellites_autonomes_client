@@ -37,7 +37,7 @@ void CurrentConsumpt::setup(Node *node, const gpio_num_t pinIn)
   xTaskCreatePinnedToCore(this->loop, "loop", 2 * 1024, this, 10, NULL, 1);
 }
 
-void IRAM_ATTR CurrentConsumpt::loop(void *p)
+void CurrentConsumpt::loop(void *p)
 {
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
@@ -76,7 +76,7 @@ void IRAM_ATTR CurrentConsumpt::loop(void *p)
   }
 }
 
-// void IRAM_ATTR CurrentConsumpt::loop(void *p)
+// void CurrentConsumpt::loop(void *p)
 // {
 //   TickType_t xLastWakeTime;
 //   xLastWakeTime = xTaskGetTickCount();
