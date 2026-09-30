@@ -24,19 +24,6 @@ static const char *sensName(uint8_t sens)
   }
 }
 
-static const char *dccDirName(uint8_t dir)
-{
-  switch (dir)
-  {
-  case 1:
-    return "FWD";
-  case 2:
-    return "REV";
-  default:
-    return "INCONNU";
-  }
-}
-
 void CanMsg::setup(Node *node)
 {
   TaskHandle_t canReceiveHandle = NULL;
@@ -87,372 +74,626 @@ void CanMsg::canReceiveMsg(void *pvParameters)
       const bool response = ((frameIn.id >> 16) & 0x01);    // Reponse
       const uint16_t idSatExpediteur = frameIn.id & 0xFFFF; // ID de l'expediteur
 
-#ifdef DEBUG
-      // debug.printf("\n[CanMsg %d]------ Expediteur %d : commande 0x%0X\n", __LINE__, idSatExpediteur, commande);
-#endif
-      if (frameIn.rtr) // Remote frame
+      // #ifdef DEBUG
+      //       // debug.printf("\n[CanMsg %d]------ Expediteur %d : commande 0x%0X\n", __LINE__, idSatExpediteur, commande);
+      // #endif
+
+      switch (commande) // commande appelee
       {
-#ifdef DEBUG
-        debug.printf("[CanMsg %d Frame de remote \n", __LINE__);
-#endif
-        switch (commande)
-        {
-        case 0xB0:
-          ACAN_ESP32::can.tryToSend(frameIn);
-          break;
-        }
+      case 0x04: // ACK de laBox pour la commande de vitesse avec bit response = 1
+      {
+        break;
       }
-      else
+
+      case 0xAA: // Retour commande throttle depuis LaBox / DCC-EX
       {
-        switch (commande) // commande appelee
+        //         if (frameIn.len < 7)
+        //         {
+        // #ifdef DEBUG
+        //           debug.printf("[CanMsg %d] Commande 0xAA invalide : len=%d\n", __LINE__, frameIn.len);
+        // #endif
+        //           break;
+        //         }
+        //         // Loc-ID reçue : 00 00 C0 xx
+        //         uint32_t locId =
+        //             ((uint32_t)frameIn.data[0] << 24) |
+        //             ((uint32_t)frameIn.data[1] << 16) |
+        //             ((uint32_t)frameIn.data[2] << 8) |
+        //             ((uint32_t)frameIn.data[3]);
+
+        //         // Extraction adresse DCC depuis Loc-ID Märklin/DCC
+        //         uint16_t cab =
+        //             ((uint16_t)(frameIn.data[2] & 0x3F) << 8) |
+        //             frameIn.data[3];
+
+        //         uint16_t speed =
+        //             ((uint16_t)frameIn.data[4] << 8) |
+        //             frameIn.data[5];
+
+        //         uint8_t direction = 0;
+        //         if (frameIn.data[6] == 0)
+        //           direction = 1;
+        //         else if (frameIn.data[6] == 1)
+        //           direction = 2;
+
+        // #ifdef DEBUG
+        //         debug.printf("[CanMsg %d] CMD 0xAA throttle : locId=0x%08lX cab=%u speed=%u dir=%d\n",
+        //                      __LINE__,
+        //                      (unsigned long)locId,
+        //                      cab,
+        //                      speed,
+        //                      direction);
+        // #endif
+
+        //         // Mise à jour de la loco locale du canton
+        //         node->loco.address(cab);
+        //         node->loco.speed(speed);
+
+        //         // 1 = horaire
+        //         // 2 = antihoraire
+
+        break;
+      }
+
+      case 0xAB: // Requête/réponse base locomotives
+      {
+        if (!response)
+          break;
+
+        if (frameIn.len < 7)
         {
-        case 0x04: // ACK de laBox pour la commande de vitesse avec bit response = 1
-        {
-          if (response && frameIn.len >= 6)
-          {
-            uint16_t ackAddr =
-                ((uint16_t)frameIn.data[2] << 8) |
-                frameIn.data[3];
-
-            uint16_t ackSpeed =
-                ((uint16_t)frameIn.data[4] << 8) |
-                frameIn.data[5];
-
-            if (node->m_pendingLocoCmd &&
-                ackAddr == node->m_pendingLocoAddr &&
-                ackSpeed == node->m_pendingLocoSpeed)
-            {
-              node->m_ackLocoCmd = true;
-              node->m_pendingLocoCmd = false;
-
-              // LOG_INFO("ACK validé loco %u vitesse %u", ackAddr, ackSpeed);
-            }
-          }
+          LOG_ERROR("Réponse base locos 0xAB invalide len=%d", frameIn.len);
           break;
         }
-          //         case 0xAA: // Retour commande throttle depuis LaBox / DCC-EX
-          //         {
-          //           if (frameIn.len < 7)
-          //           {
-          // #ifdef DEBUG
-          //             debug.printf("[CanMsg %d] Commande 0xAA invalide : len=%d\n", __LINE__, frameIn.len);
-          // #endif
-          //             break;
-          //           }
-          //           // Loc-ID reçue : 00 00 C0 xx
-          //           uint32_t locId =
-          //               ((uint32_t)frameIn.data[0] << 24) |
-          //               ((uint32_t)frameIn.data[1] << 16) |
-          //               ((uint32_t)frameIn.data[2] << 8) |
-          //               ((uint32_t)frameIn.data[3]);
 
-          //           // Extraction adresse DCC depuis Loc-ID Märklin/DCC
-          //           uint16_t cab =
-          //               ((uint16_t)(frameIn.data[2] & 0x3F) << 8) |
-          //               frameIn.data[3];
+        uint16_t addr = (static_cast<uint16_t>(frameIn.data[2] & 0x3F) << 8) | static_cast<uint16_t>(frameIn.data[3]);
 
-          //           uint16_t speed =
-          //               ((uint16_t)frameIn.data[4] << 8) |
-          //               frameIn.data[5];
+        if (addr == 0 || addr != node->loco.address())
+          break;
 
-          //           uint8_t direction = 0;
-          //           if (frameIn.data[6] == 0)
-          //             direction = 1;
-          //           else if (frameIn.data[6] == 1)
-          //             direction = 2;
+        uint16_t speed = static_cast<uint16_t>(frameIn.data[4] << 8) | static_cast<uint16_t>(frameIn.data[5]);
+        uint8_t networkDirection = frameIn.data[6]; // 1=HORAIRE, 2=ANTIHORAIRE -- sens réel, déjà résolu par la centrale
 
-          // #ifdef DEBUG
-          //           debug.printf("[CanMsg %d] CMD 0xAA throttle : locId=0x%08lX cab=%u speed=%u dir=%d\n",
-          //                        __LINE__,
-          //                        (unsigned long)locId,
-          //                        cab,
-          //                        speed,
-          //                        direction);
-          // #endif
+        node->loco.speed(speed);
+        node->loco.oldSpeed(speed);
+        node->loco.networkDirection(networkDirection);
+        break;
+      }
 
-          //           // Mise à jour de la loco locale du canton
-          //           node->loco.address(cab);
-          //           node->loco.speed(speed);
+      case 0xB2: // fn : Reponse à demande de présence de la carte Main
+        LOG_INFO("Reponse demande de test présence de la carte Main");
+        if (idSatExpediteur == 0x0001) // ID de la carte Main
+          Settings::mainReady(true);
+        break;
 
-          //           // À adapter selon ta convention actuelle :
-          //           // 1 = horaire / forward
-          //           // 2 = antihoraire / reverse
-          //           node->loco.direction(direction);
-
-          //           break;
-          //         }
-
-        case 0xAB: // Requête/réponse base locomotives
+      case 0xB3: // fn : Reponse à demande d'identifiant (0xB3)
+        if (response && node->ID() == 0)
+          node->ID(frameIn.data[0]);
+        break;
+      case 0xBC: // Reset ESP32
+        ESP.restart();
+        break;
+      case 0xBD: // Activation  - desactivation du WiFi
+        Serial.print("desactivation du WiFi : ");
+        Serial.println(frameIn.data[0]);
+        Settings::wifiOn(frameIn.data[0]);
+        Serial.print("desactivation du WiFi : ");
+        Serial.println(Settings::wifiOn());
+        Settings::writeFile();
+        delay(1000);
+        ESP.restart();
+        break;
+      case 0xBE: // Activation  - desactivation du mode Discovery
+        if (frameIn.data[0])
         {
-          if (!response)
-          {
-            LOG_INFO("Requête base loco reçue 0xAB");
-            break;
-          }
-
-          if (frameIn.len < 7)
-          {
-            LOG_ERROR("Réponse base loco 0xAB invalide len=%d", frameIn.len);
-            break;
-          }
-
-          uint16_t addr =
-              ((uint16_t)(frameIn.data[2] & 0x3F) << 8) |
-              frameIn.data[3];
-
-          if (addr <= 1)
-            break;
-
-          uint16_t speed =
-              ((uint16_t)frameIn.data[4] << 8) |
-              frameIn.data[5];
-
-          uint8_t direction = frameIn.data[6]; // 0 = FWD, 1 = REV
-
-          TrafficState state = static_cast<TrafficState>(node->trafficState());
-
-          uint8_t dccDir = (direction == 0) ? 1 : 2;
-
-          if (state == TrafficState::RESERVED)
-          {
-            if (addr != node->reservedBy())
-              break;
-
-            node->reservedLoco.address(addr);
-            node->reservedLoco.speed(speed);
-            node->reservedLoco.direction(dccDir);
-
-            LOG_INFO("Reponse base loco 0xAB reservedLoco : addr=%u speed=%u dccDir=%s netSens=%s",
-                     addr,
-                     speed,
-                     dccDirName(node->reservedLoco.direction()),
-                     sensName(node->reservedSens()));
-            break;
-          }
-
-          if (node->loco.address() > 1 && addr != node->loco.address())
-            break;
-
-          node->loco.address(addr);
-          node->loco.speed(speed);
-          node->loco.direction(dccDir);
-
-          LOG_INFO("Reponse base loco 0xAB loco : addr=%u speed=%u dccDir=%s netSens=%s",
-                   addr,
-                   speed,
-                   dccDirName(node->loco.direction()),
-                   sensName(node->loco.sens()));
-        }
-
-        case 0xB2: // fn : Reponse à demande de test du bus CAN
-          LOG_INFO("Reponse demande de test du bus CAN");
-          if (response && frameIn.data[0])
-            Settings::mainReady(true);
-          break;
-        case 0xB4: // fn : Reponse à demande d'identifiant (0xB4)
-          if (response && node->ID() == UNUSED_ID)
-            node->ID(frameIn.data[0]);
-          break;
-        case 0xBC: // Reset ESP32
-          ESP.restart();
-          break;
-        case 0xBD: // Activation  - desactivation du WiFi
-          Serial.print("desactivation du WiFi : ");
-          Serial.println(frameIn.data[0]);
-          Settings::wifiOn(frameIn.data[0]);
-          Serial.print("desactivation du WiFi : ");
-          Serial.println(Settings::wifiOn());
+          Settings::discoveryOn(true);
           Settings::writeFile();
           delay(1000);
           ESP.restart();
-          break;
-        case 0xBE: // Activation  - desactivation du mode Discovery
-          if (frameIn.data[0])
+        }
+        else
+        {
+          Settings::discoveryOn(false);
+          Discovery::stopProcess(true);
+        }
+        Settings::writeFile();
+        break;
+      case 0xBF: // fn : Enregistrement des données en mémoire flash
+#ifdef SAUV_BY_MAIN
+        LOG_INFO("[CanMsg.cpp %d] ------ Rec->sauvegarde distante", __LINE__);
+        Settings::writeFile();
+#else
+        LOG_INFO("[CanMsg.cpp %d] ------ Sauvegarde automatique desactivee.", __LINE__);
+#endif
+        break;
+
+      case 0xC0: // fn : Réception de l'ID d'un satellite
+        Discovery::ID_satPeriph(idSatExpediteur);
+        break;
+
+      case 0xC1: // reception periodique des data envoyees par les sat pendant le processus de decouverte
+
+        LOG_INFO("[CanMsg.cpp %d] commande 0xC1, ID exped %d ", __LINE__, idSatExpediteur);
+
+        for (auto el : node->nodeP)
+        {
+          if (el != nullptr)
           {
-            Settings::discoveryOn(true);
-            Settings::writeFile();
-            delay(1000);
-            ESP.restart();
+            if (idSatExpediteur == el->ID()) // Si l'expediteur est un SP1 ou un SM1
+            {
+              el->masqueAig(frameIn.data[0]);
+              // Serial.print("el.id = ");Serial.println(el->ID());
+              // Serial.print("el.masqueAig = ");Serial.println(el->masqueAig());
+            }
+          }
+        }
+        break;
+
+      case 0xE3:
+      {
+        // if (frameIn.len < 4)
+        //   break;
+
+        // const uint8_t targetId = frameIn.data[0];
+
+        // const uint16_t addr =
+        //     ((uint16_t)frameIn.data[1] << 8) |
+        //     frameIn.data[2];
+
+        // const uint8_t sens = frameIn.data[3];
+
+        // if (node->ID() != targetId)
+        //   break;
+
+        // if (node->busy())
+        // {
+        //   LOG_ERROR("Reservation refusee : canton occupe target=%u loco=%u occupant=%u",
+        //             targetId,
+        //             addr,
+        //             node->loco.address());
+        //   break;
+        // }
+
+        // if (node->reservedBy() <= 1 || node->reservedBy() == addr)
+        // {
+        //   node->reservedBy(addr);
+        //   node->reserved(sens);
+        //   node->reservedAt(millis());
+
+        //   // node->trafficState((uint8_t)TrafficState::RESERVED);
+        //   if (!node->busy())
+        //   {
+        //     node->trafficState((uint8_t)TrafficState::RESERVED);
+        //   }
+
+        //   LOG_INFO("Reservation canton acceptee target=%u loco=%u sens=%u busy=%u state=%u",
+        //            targetId,
+        //            addr,
+        //            sens,
+        //            node->busy(),
+        //            node->trafficState());
+
+        //   CanMsg::sendMsg(1, 0xAB, 0, node->ID(),
+        //                   0x00, 0x00,
+        //                   (uint8_t)(0xC0 | ((addr >> 8) & 0x3F)),
+        //                   (uint8_t)(addr & 0xFF));
+        // }
+        // else
+        // {
+        //   LOG_INFO("Reservation refusee loco %u reserveBy=%u busy=%u",
+        //            addr,
+        //            //node->reservedBy(),
+        //            node->busy());
+        // }
+
+        break;
+      }
+
+        // De 0x40 à 0x4F, concerne l'état d'un satellite diffusé sur le réseau
+      case 0x40: // Réception de l'état d'un satellite
+      {
+        if (frameIn.len != 7)
+          continue; // Ignore ce message si la taille est incorrecte
+
+        for (uint8_t i = 0; i < nodePsize; i++)
+        {
+          // Est-ce que l'expéditeur est l'un de mes périphériques directs ?
+          if (node->nodeP[i] == nullptr || node->nodeP[i]->ID() != idSatExpediteur)
+            continue;
+          // Oui, l'expéditeur est l'un de mes périphériques
+          uint8_t etats = frameIn.data[4];
+          // Ce sat est-il occupé ou libre ?
+          node->nodeP[i]->busy(etats & 0x01);
+          // Ce sat est-il reservé ou pas ?
+          node->nodeP[i]->reserved(etats & 0x02);
+
+          const uint16_t trainAddr =
+              ((uint16_t)frameIn.data[5] << 8) | frameIn.data[6];
+          node->nodeP[i]->locoAddr(trainAddr);
+
+          const uint16_t bSp1Id = static_cast<uint16_t>((frameIn.data[0] << 8) | frameIn.data[1]);
+          const uint16_t bSm1Id = static_cast<uint16_t>((frameIn.data[2] << 8) | frameIn.data[3]);
+
+          if (i < 4)
+          {
+            node->nodeP[i]->acces(bSm1Id == node->ID());
+
+            if (node->SP1 == node->nodeP[i])
+            {
+              const uint16_t farId = bSp1Id;
+
+              node->SP2->ID(farId);
+
+              if (farId == 0)
+              {
+                node->SP2->busy(true);
+                node->SP2->acces(false);
+              }
+              else
+              {
+                node->SP2->busy(etats & 0x04);
+                node->SP2->acces(etats & 0x08);
+              }
+            }
           }
           else
           {
-            Settings::discoveryOn(false);
-            Discovery::stopProcess(true);
-          }
-          Settings::writeFile();
-          break;
-        case 0xBF: // fn : Enregistrement des données en mémoire flash
-#ifdef SAUV_BY_MAIN
-          LOG_INFO("[CanMsg.cpp %d] ------ Rec->sauvegarde distante", __LINE__);
-          Settings::writeFile();
-#else
-          LOG_INFO("[CanMsg.cpp %d] ------ Sauvegarde automatique desactivee.", __LINE__);
-#endif
-          break;
+            node->nodeP[i]->acces(bSp1Id == node->ID());
 
-        case 0xC0: // fn : Réception de l'ID d'un satellite
-          Discovery::ID_satPeriph(idSatExpediteur);
-          break;
-
-        case 0xC1: // reception periodique des data envoyees par les sat pendant le processus de decouverte
-
-          LOG_INFO("[CanMsg.cpp %d] commande 0xC1, ID exped %d ", __LINE__, idSatExpediteur);
-
-          for (auto el : node->nodeP)
-          {
-            if (el != nullptr)
+            if (node->SM1 == node->nodeP[i])
             {
-              if (idSatExpediteur == el->ID()) // Si l'expediteur est un SP1 ou un SM1
+              const uint16_t farId = bSm1Id;
+
+              node->SM2->ID(farId);
+
+              if (farId == 0)
               {
-                el->masqueAig(frameIn.data[0]);
-                // Serial.print("el.id = ");Serial.println(el->ID());
-                // Serial.print("el.masqueAig = ");Serial.println(el->masqueAig());
+                node->SM2->busy(true);
+                node->SM2->acces(false);
+              }
+              else
+              {
+                node->SM2->busy(etats & 0x10);
+                node->SM2->acces(etats & 0x20);
+              }
+            }
+          }
+        }
+        break;
+      }
+
+        // De 0x41 : réservation de canton
+      case 0x41:
+      {
+        if (frameIn.len != 4)
+          continue;
+
+        const uint16_t messageId =
+            (static_cast<uint16_t>(frameIn.data[0]) << 8) |
+            static_cast<uint16_t>(frameIn.data[1]);
+
+        const uint16_t addr =
+            (static_cast<uint16_t>(frameIn.data[2]) << 8) |
+            static_cast<uint16_t>(frameIn.data[3]);
+
+        /******************************************************************
+         * DEMANDE DE RESERVATION
+         ******************************************************************/
+        if (!response)
+        {
+          const uint16_t targetId = messageId;
+
+          // La demande ne m'est pas destinée
+          if (targetId != node->ID())
+            continue;
+
+          const bool accepted =
+              node->reserved.reservation(idSatExpediteur, addr);
+
+          if (accepted)
+          {
+            CanMsg::sendMsg(
+                1,
+                0x41,
+                1,
+                node->ID(),
+                static_cast<uint8_t>(idSatExpediteur >> 8),
+                static_cast<uint8_t>(idSatExpediteur & 0xFF),
+                static_cast<uint8_t>(addr >> 8),
+                static_cast<uint8_t>(addr & 0xFF));
+
+            LOG_INFO(
+                "Reservation acceptee : canton=%u origine=%u loco=%u",
+                node->ID(),
+                idSatExpediteur,
+                addr);
+
+            if (!node->busy())
+            {
+              if (!node->setAccessFrom(idSatExpediteur))
+              {
+                LOG_WARN(
+                    "Reservation acceptee mais route impossible vers satellite %u",
+                    idSatExpediteur);
               }
             }
           }
           break;
+        }
 
-        case 0xE0:
+        /******************************************************************
+         * CONFIRMATION DE RESERVATION
+         ******************************************************************/
+        const uint16_t requesterId = messageId;
+
+        /*
+         * idSatExpediteur est ici le canton QUI EST RESERVE.
+         *
+         * Exemple :
+         *   idSatExpediteur = 3
+         *   requesterId     = 2
+         *   addr            = 6400
+         *
+         * => canton 3 réservé par satellite 2 pour loco 6400
+         */
+
+        for (uint8_t i = 0; i < nodePsize; i++)
         {
-          if (frameIn.len < 7)
-            break;
-
-          NodePeriph *periph = nullptr;
-          uint8_t periphIdx = UNUSED_ID;
-
-          for (uint8_t i = 0; i < nodePsize; i++)
-          {
-            if (node->nodeP[i] != nullptr &&
-                node->nodeP[i]->ID() == idSatExpediteur)
-            {
-              periph = node->nodeP[i];
-              periphIdx = i;
-              break;
-            }
-          }
+          NodePeriph *periph = node->nodeP[i];
 
           if (periph == nullptr)
-          {
-            // LOG_INFO("0xE0 ignore : expediteur inconnu %u", idSatExpediteur);
-            break;
-          }
+            continue;
 
-          periph->busy(frameIn.data[0]);
+          if (periph->ID() != idSatExpediteur)
+            continue;
 
-          // LOG_INFO("0xE0 maj sat %u idx=%u busy=%u",
-          //          idSatExpediteur,
-          //          periphIdx,
-          //          frameIn.data[0]);
+          periph->reserved(true);
+          periph->reservedBySat(requesterId);
+          periph->reservedByLoco(addr);
 
-          // Si l'expéditeur est mon SP1, alors son SP1 devient mon SP2
-          if (periphIdx == node->SP1_idx())
-          {
-            node->SP2_acces(frameIn.data[3]);
-            node->SP2_busy(frameIn.data[4]);
-          }
-
-          // Si l'expéditeur est mon SM1, alors son SM1 devient mon SM2
-          if (periphIdx == node->SM1_idx())
-          {
-            node->SM2_acces(frameIn.data[5]);
-            node->SM2_busy(frameIn.data[6]);
-          }
+          LOG_INFO(
+              "Reservation voisine : canton=%u par sat=%u loco=%u",
+              idSatExpediteur,
+              requesterId,
+              addr);
 
           break;
         }
 
-        case 0xE3:
+        /*
+         * Si je suis moi-même le demandeur, la réservation est maintenant
+         * confirmée.
+         *
+         * Rien d'autre à faire pour l'instant.
+         */
+        if (requesterId == node->ID())
         {
-          if (frameIn.len < 4)
-            break;
-
-          const uint8_t targetId = frameIn.data[0];
-
-          const uint16_t addr =
-              ((uint16_t)frameIn.data[1] << 8) |
-              frameIn.data[2];
-
-          const uint8_t sens = frameIn.data[3];
-
-          if (node->ID() != targetId)
-            break;
-
-          // if (node->busy())
-          // {
-          //   LOG_ERROR("Reservation refusee : canton occupe target=%u loco=%u occupant=%u",
-          //             targetId,
-          //             addr,
-          //             node->loco.address());
-          //   break;
-          // }
-
-          if (node->reservedBy() <= 1 || node->reservedBy() == addr)
-          {
-            node->reservedBy(addr);
-            node->reservedSens(sens);
-            node->reservedAt(millis());
-
-            // node->trafficState((uint8_t)TrafficState::RESERVED);
-            if (!node->busy())
-            {
-              node->trafficState((uint8_t)TrafficState::RESERVED);
-            }
-
-            LOG_INFO("Reservation canton acceptee target=%u loco=%u sens=%u busy=%u state=%u",
-                     targetId,
-                     addr,
-                     sens,
-                     node->busy(),
-                     node->trafficState());
-
-            CanMsg::sendMsg(1, 0xAB, 0, node->ID(),
-                            0x00, 0x00,
-                            (uint8_t)(0xC0 | ((addr >> 8) & 0x3F)),
-                            (uint8_t)(addr & 0xFF));
-          }
-          else
-          {
-            LOG_INFO("Reservation refusee loco %u reserveBy=%u busy=%u",
-                     addr,
-                     node->reservedBy(),
-                     node->busy());
-          }
-
-          break;
+          LOG_INFO(
+              "Ma reservation confirmee : canton=%u loco=%u",
+              idSatExpediteur,
+              addr);
         }
 
-        case 0xE5: // reception de l'adresse de la locomotive sur SP1 ou SM1
-          if (node->nodeP[node->SP1_idx()] != nullptr)
-          {
-            if (idSatExpediteur == node->nodeP[node->SP1_idx()]->ID()) // Si l'expediteur est SP1
-            {
-              node->nodeP[node->SP1_idx()]->locoAddr((frameIn.data[0] << 8) + frameIn.data[1]);
-            }
-          }
-          if (node->nodeP[node->SM1_idx()] != nullptr)
-          {
-            if (idSatExpediteur == node->nodeP[node->SM1_idx()]->ID()) // Si l'expediteur est SM1
-            {
-              node->nodeP[node->SM1_idx()]->locoAddr((frameIn.data[0] << 8) + frameIn.data[1]);
-            }
-          }
-          break;
+        break;
+      }
+      case 0x42:
+      {
+        break;
+      }
+      case 0x43:
+      {
+        break;
+      }
+      case 0x44:
+      {
+        break;
+      }
+      case 0x45:
+      {
+        break;
+      }
+      case 0x46:
+      {
+        break;
+      }
+      case 0x47:
+      {
+        break;
+      }
+      case 0x48:
+      {
+        break;
+      }
+      case 0x49:
+      {
+        break;
+      }
+      case 0x4A:
+      {
+        break;
+      }
+      case 0x4B:
+      {
+        break;
+      }
+      case 0x4C:
+      {
+        break;
+      }
+      case 0x4D:
+      {
+        break;
+      }
+      case 0x4E:
+      {
+        break;
+      }
+      case 0x4F:
+      {
+        break;
+      }
 
-        case 0xE9:
-          /*****************************************************************************************************
-           * reception d'une commande d'aiguillage
-           ******************************************************************************************************/
+      case 0xE0:
+      {
+        break;
+      }
+      case 0xE1:
+      {
+        break;
+      }
+      case 0xE2:
+      {
+        break;
+      }
+        // case 0xE3:
+        // break;
 
-          if (node->ID() == frameIn.data[0])
-            node->aigRun(frameIn.data[1]);
-          break;
+        // case 0xE4:
+
+        // break;
+
+      case 0xE5: // reception de l'adresse de la locomotive sur SP1 ou SM1
+      {
+        // if (node->nodeP[node->SP1_idx()] != nullptr)
+        // {
+        //   if (idSatExpediteur == node->nodeP[node->SP1_idx()]->ID()) // Si l'expediteur est SP1
+        //   {
+        //     node->nodeP[node->SP1_idx()]->locoAddr((frameIn.data[0] << 8) + frameIn.data[1]);
+        //   }
+        // }
+        // if (node->nodeP[node->SM1_idx()] != nullptr)
+        // {
+        //   if (idSatExpediteur == node->nodeP[node->SM1_idx()]->ID()) // Si l'expediteur est SM1
+        //   {
+        //     node->nodeP[node->SM1_idx()]->locoAddr((frameIn.data[0] << 8) + frameIn.data[1]);
+        //   }
+        // }
+        // break;
+      }
+      case 0xE6:
+      {
+        break;
+      }
+      case 0xE7:
+      {
+        break;
+      }
+      case 0xE8:
+      {
+        break;
+      }
+      case 0xE9: // reception d'une commande d'aiguillage
+      {
+        /*****************************************************************************************************
+         * reception d'une commande d'aiguillage
+         ******************************************************************************************************/
+
+        if (node->ID() ==
+            (((uint16_t)frameIn.data[0] << 8) |
+             (uint16_t)frameIn.data[1]))
+        {
+          node->aigRun(frameIn.data[2]);
         }
+        break;
+      }
+      case 0xEA:
+      {
+        break;
+      }
+      case 0xEB:
+      {
+        break;
+      }
+      case 0xEC:
+      {
+        break;
+      }
+      case 0xED:
+      {
+        break;
+      }
+      case 0xEE:
+      {
+        break;
+      }
+      case 0xEF:
+      {
+        break;
+      }
+
+      case 0xF0:
+      {
+        break;
+      }
+      case 0xF1:
+      {
+        break;
+      }
+      case 0xF2:
+      {
+        break;
+      }
+      case 0xF3:
+      {
+        break;
+      }
+      case 0xF4:
+      {
+        break;
+      }
+      case 0xF5:
+      {
+        break;
+      }
+      case 0xF6:
+      {
+        break;
+      }
+      case 0xF7:
+      {
+        break;
+      }
+      case 0xF8:
+      {
+        break;
+      }
+      case 0xF9:
+      {
+        break;
+      }
+      case 0xFA:
+      {
+        break;
+      }
+      case 0xFB:
+      {
+        break;
+      }
+      case 0xFC:
+      {
+        break;
+      }
+      case 0xFD:
+      {
+        break;
+      }
+      case 0xFE:
+      {
+        break;
+      }
+      case 0xFF:
+      {
+        break;
+      }
+      default:
+      {
+        LOG_ERROR("Commande 0x%0X non trouvée ", commande);
+      }
       }
     }
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(10));
   }
 }
-
 /*--------------------------------------
   Envoi CAN
   --------------------------------------*/

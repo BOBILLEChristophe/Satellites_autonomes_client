@@ -215,7 +215,7 @@ void WebHandler::notifyClients()
 
   // Nœuds
   String index[] = {"p00", "p01", "p10", "p11", "m00", "m01", "m10", "m11"};
-  for (byte i = 0; i < 8; i++)
+  for (byte i = 0; i < nodePsize; i++)
   {
     if (node->nodeP[i] == nullptr)
       doc[index[i]] = "null";
@@ -236,17 +236,16 @@ void WebHandler::notifyClients()
   }
 
   doc["locoRailMode"] = node->loco.railMode(); // 2R / 3R
-  doc["locoNetworkDir"] = node->loco.sens();   // sens réel sur le réseau
+  doc["locoNetworkDir"] = node->loco.networkDirection();
 
-  switch (node->loco.direction())
+  switch (node->loco.networkDirection())
   {
-
   case 1:
-    doc["locoDirection"] = "Avant";
+    doc["locoDirection"] = "Horaire";
     break;
 
   case 2:
-    doc["locoDirection"] = "Arrière";
+    doc["locoDirection"] = "Anti-horaire";
     break;
 
   default:
@@ -277,7 +276,7 @@ void WebHandler::notifyClients()
   doc["discovery_on"] = Settings::discoveryOn();
 
   doc["maxSpeed"] = node->maxSpeed();
-  doc["sensMarche"] = node->sensMarche();
+  // doc["sensMarche"] = node->sensMarche();
 
   if (node->signal[0] != nullptr)
     doc["cibleHoraire"] = node->signal[0]->type();

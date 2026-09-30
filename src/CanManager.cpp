@@ -15,7 +15,6 @@ void CanManager::setup()
     settings.mTxPin = CAN_TX;
 
     const uint32_t errorCode = ACAN_ESP32::can.begin(settings);
-
     LOG_INFO("[CanManager %d] Configuration CAN sans filtre", __LINE__);
 
     if (errorCode == 0)

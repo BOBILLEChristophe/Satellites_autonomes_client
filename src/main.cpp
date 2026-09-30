@@ -1,19 +1,18 @@
 
 
 /*
-
 copyright (c) 2022 christophe.bobille - LOCODUINO - www.locoduino.org
 
-v 0.11.8 : Ajout de la détection de présence par consommation de courant
-v 0.11.9 : Correction de divers petits bugs après essais sur réseau
-v 0.12.0 : Plusieurs bugs corrigés pour la signalisation
-v 0.12.1 : Modification importantes des structures de message CAN
-v 0.13.0 : Mise à jour importante Ajout de fonctionnalités
-v 0.13.1 : Correction d'un bug sur les commandes d'aiguille
-v 0.13.2 : Petits ajustements
-v 0.14.0 : Evolutions majeures pour la détection et l'envoi de commandes CAN a laBox
-v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
-
+v 0.30.0 : Refonte majeure de la gestion du trafic et des réservations
+           - Séparation claire entre occupation physique du canton et réservation
+           - Nouvelle gestion distribuée des réservations avec identification du satellite
+             et de la locomotive à l'origine de la réservation
+           - Transmission par CAN de l'adresse du train occupant un canton
+           - Distinction entre canton occupé par son propre train et par un autre train
+           - Simplification de la direction : uniquement HORAIRE / ANTIHORAIRE côté satellite
+           - Renouvellement périodique et expiration automatique des réservations
+           - Préparation de la commutation automatique des aiguilles pour rendre accessible
+             un canton réservé
 */
 
 //---  Test si ESP32
@@ -22,7 +21,7 @@ v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
 #endif
 
 #define PROJECT "Satellites autonomes (client)"
-#define VERSION "v 0.21.1"
+#define VERSION "v 0.30.0"
 #define AUTHOR "christophe BOBILLE : christophe.bobille@gmail.com"
 
 //--- Fichiers inclus
@@ -49,8 +48,7 @@ v 0.14.1 : Introduction de l'information "canton reservé" (Node::m_reserved)
 
 // Instances
 Node node;
-Railcom railcom(RAILCOM_RX, RAILCOM_TX);
-// TrafficManager trafficManager(&node);
+Railcom railcom(RAILCOM_RX);
 WifiManager wifi;
 WebHandler webHandler;
 CurrentConsumpt currentConsumpt;
@@ -105,7 +103,7 @@ void setup()
     return;
   }
 
-  //Settings::wifiOn(true);
+  // Settings::wifiOn(true);
 
   if (Settings::discoveryOn()) // Si option validee, lancement de la méthode pour le procecuss de decouverte
   {
@@ -146,9 +144,12 @@ void setup()
   wifiOn = Settings::wifiOn();
 
   ArduinoOTA.setHostname("satellite_client");
-  ArduinoOTA.onStart([]() { LOG_INFO("OTA start"); });
-  ArduinoOTA.onEnd([]() { LOG_INFO("OTA end"); });
-  ArduinoOTA.onError([](ota_error_t error){ LOG_ERROR("OTA error %u", error); });
+  ArduinoOTA.onStart([]()
+                     { LOG_INFO("OTA start"); });
+  ArduinoOTA.onEnd([]()
+                   { LOG_INFO("OTA end"); });
+  ArduinoOTA.onError([](ota_error_t error)
+                     { LOG_ERROR("OTA error %u", error); });
   ArduinoOTA.begin();
 
 } // ->End setup
@@ -163,7 +164,7 @@ void loop()
 
   //******************** Ecouteur page web **********************************
 
-  if (wifiOn)          // Si option validée
+  if (wifiOn) // Si option validée
   {
     ArduinoOTA.handle();
     webHandler.loop(); // ecoute des ports web 80 et 81
@@ -174,7 +175,12 @@ void loop()
     //************************* Railcom ****************************************
     // if (railcom.address() && node.busy())
     // {
-    node.loco.address(railcom.address());
+    const uint16_t railcomAddr = railcom.address();
+
+    if (node.busy() && railcomAddr > 0)
+    {
+      node.loco.address(railcomAddr);
+    }
     // }
     if (node.loco.address() != oldAddress)
     {

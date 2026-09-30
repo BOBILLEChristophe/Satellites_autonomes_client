@@ -24,6 +24,7 @@ private:
   static String ssid_str;
   static String password_str;
   static bool WIFI_ON;
+  static bool OTA_ON;
   static bool DISCOVERY_ON;
   static Node *node;
 
@@ -42,5 +43,7 @@ public:
   static void discoveryOn(bool);
   static bool wifiOn();
   static void wifiOn(bool);
+  static bool otaOn();
+  static void otaOn(bool);
 };
 

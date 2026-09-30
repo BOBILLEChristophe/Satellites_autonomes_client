@@ -4,9 +4,6 @@
 
 uint16_t TrafficManager::signalValue[2] = {0, 0};
 
-static constexpr uint8_t SENSOR_HORAIRE = 0;
-static constexpr uint8_t SENSOR_ANTIHOR = 1;
-
 static constexpr uint8_t SENS_INCONNU = 0;
 static constexpr uint8_t SENS_HORAIRE = 1;
 static constexpr uint8_t SENS_ANTIHOR = 2;
@@ -17,188 +14,6 @@ static constexpr uint16_t SIGNAL_VERT = 2;
 static constexpr uint16_t SIGNAL_CARRE = 3;
 static constexpr uint16_t SIGNAL_RALENTISSEMENT = 4;
 static constexpr uint16_t SIGNAL_RRALENTISSEMENT = 5;
-
-static uint16_t blockedAddr = 0;
-static uint8_t blockedDccDirection = 0;
-static uint8_t blockedNetworkDirection = 0;
-
-/////////////////////////////////////////////////////////////////////////////////
-
-static const char *stateName(TrafficState s)
-{
-    switch (s)
-    {
-    case TrafficState::FREE:
-        return "FREE";
-    case TrafficState::RESERVED:
-        return "RESERVED";
-    case TrafficState::OCCUPIED_UNKNOWN:
-        return "OCCUPIED_UNKNOWN";
-    case TrafficState::OCCUPIED_KNOWN:
-        return "OCCUPIED_KNOWN";
-    case TrafficState::RUNNING:
-        return "RUNNING";
-    case TrafficState::SPEED_LIMITED:
-        return "SPEED_LIMITED";
-    case TrafficState::SLOWING:
-        return "SLOWING";
-    case TrafficState::STOPPING:
-        return "STOPPING";
-    case TrafficState::STOPPED:
-        return "STOPPED";
-    case TrafficState::ERROR:
-        return "ERROR";
-    default:
-        return "?";
-    }
-}
-
-static const char *eventName(TrafficEvent e)
-{
-    switch (e)
-    {
-    case TrafficEvent::NONE:
-        return "NONE";
-    case TrafficEvent::BUSY_ON:
-        return "BUSY_ON";
-    case TrafficEvent::BUSY_OFF:
-        return "BUSY_OFF";
-    case TrafficEvent::RESERVATION_REQUEST:
-        return "RESERVATION_REQUEST";
-    case TrafficEvent::LOCO_IDENTIFIED:
-        return "LOCO_IDENTIFIED";
-    case TrafficEvent::INFOS_LOCO_OK:
-        return "INFOS_LOCO_OK";
-    case TrafficEvent::SPEED_ABOVE_LIMIT:
-        return "SPEED_ABOVE_LIMIT";
-    case TrafficEvent::SPEED_OK:
-        return "SPEED_OK";
-    case TrafficEvent::NEXT_FREE:
-        return "NEXT_FREE";
-    case TrafficEvent::NEXT_BUSY:
-        return "NEXT_BUSY";
-    case TrafficEvent::NEXT_RESERVED_BY_ME:
-        return "NEXT_RESERVED_BY_ME";
-    case TrafficEvent::NEXT_RESERVED_BY_OTHER:
-        return "NEXT_RESERVED_BY_OTHER";
-    case TrafficEvent::BRAKE_SENSOR:
-        return "BRAKE_SENSOR";
-    case TrafficEvent::STOP_SENSOR:
-        return "STOP_SENSOR";
-    case TrafficEvent::SPEED_ZERO:
-        return "SPEED_ZERO";
-    case TrafficEvent::MANUAL_COMMAND_ALLOWED:
-        return "MANUAL_COMMAND_ALLOWED";
-    case TrafficEvent::MANUAL_COMMAND_DANGEROUS:
-        return "MANUAL_COMMAND_DANGEROUS";
-    case TrafficEvent::TIMEOUT:
-        return "TIMEOUT";
-    case TrafficEvent::ERROR_EVENT:
-        return "ERROR_EVENT";
-    default:
-        return "?";
-    }
-}
-
-static const char *sensName(uint8_t sens)
-{
-    switch (sens)
-    {
-    case SENS_HORAIRE:
-        return "HORAIRE";
-
-    case SENS_ANTIHOR:
-        return "ANTIHOR";
-
-    default:
-        return "INCONNU";
-    }
-}
-
-static void clearReservation(Node *node)
-{
-    if (node == nullptr)
-        return;
-
-    node->reservedBy(0);
-    node->reservedSens(SENS_INCONNU);
-    node->reservedAt(0);
-
-    node->reservedLoco.address(1);
-    node->reservedLoco.speed(0);
-    node->reservedLoco.targetSpeed(1000);
-    node->reservedLoco.direction(0);
-    node->reservedLoco.sens(SENS_INCONNU);
-
-    LOG_INFO("Reservation effacee");
-}
-
-void TrafficManager::enterError(Node *node, const char *reason)
-{
-    node->trafficState((uint8_t)TrafficState::ERROR);
-    LOG_ERROR("TrafficManager ERROR : %s", reason);
-}
-
-static bool speedClose(uint16_t a, uint16_t b)
-{
-    constexpr uint16_t SPEED_TOLERANCE = 20;
-
-    return (a > b)
-               ? ((a - b) <= SPEED_TOLERANCE)
-               : ((b - a) <= SPEED_TOLERANCE);
-}
-
-static bool forceStop(Node *node, uint16_t addr)
-{
-    // Direction = avant, vitesse = 0;
-    CanMsg::sendMsg(0, 0x05, 0, node->ID(),
-                    0x00, 0x00,
-                    (uint8_t)((addr >> 8) & 0xFF),
-                    (uint8_t)(addr & 0xFF),
-                    node->loco.direction());
-
-    bool ok = CanMsg::sendMsg(0, 0x04, 0, node->ID(),
-                              0x00, 0x00,
-                              (uint8_t)((addr >> 8) & 0xFF),
-                              (uint8_t)(addr & 0xFF),
-                              0x00,
-                              0x00);
-
-    if (ok)
-        node->loco.targetSpeed(0);
-
-    return ok;
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-
-static bool commandSpeedIfNeeded(Node *node, uint16_t addr, uint16_t targetSpeed)
-{
-    if (speedClose(node->loco.targetSpeed(), targetSpeed))
-        return false;
-
-    const uint8_t dir = node->loco.direction(); // 1=FWD, 2=REV
-
-    // 1) Envoyer d'abord la direction connue par la base loco
-    CanMsg::sendMsg(0, 0x05, 0, node->ID(),
-                    0x00, 0x00,
-                    (uint8_t)((addr >> 8) & 0xFF),
-                    (uint8_t)(addr & 0xFF),
-                    dir);
-
-    // 2) Puis envoyer la vitesse
-    bool ok = CanMsg::sendMsg(0, 0x04, 0, node->ID(),
-                              0x00, 0x00,
-                              (uint8_t)((addr >> 8) & 0xFF),
-                              (uint8_t)(addr & 0xFF),
-                              (uint8_t)((targetSpeed >> 8) & 0xFF),
-                              (uint8_t)(targetSpeed & 0xFF));
-
-    if (ok)
-        node->loco.targetSpeed(targetSpeed);
-
-    return ok;
-}
 
 void TrafficManager::setup(Node *node)
 {
@@ -247,337 +62,6 @@ void TrafficManager::testMemory(void *pvParameters)
 }
 #endif
 
-bool TrafficManager::speedClose(uint16_t a, uint16_t b)
-{
-    constexpr uint16_t SPEED_TOLERANCE = 20; // 2 %
-    return (a > b) ? ((a - b) <= SPEED_TOLERANCE)
-                   : ((b - a) <= SPEED_TOLERANCE);
-}
-
-void TrafficManager::readContext(Node *node, TrafficContext &ctx)
-{
-    ctx.busy = node->busy();
-    // LOG_INFO("busy=%u", node->busy());
-    ctx.locoAddr = node->loco.address();
-    ctx.locoSpeed = node->loco.speed();
-    ctx.maxSpeed = node->maxSpeed();
-
-    ctx.locoDirection = node->loco.direction();
-    ctx.networkDirection = node->loco.sens();
-
-    ctx.sensorHoraire = node->sensor[SENSOR_HORAIRE].state();
-    ctx.sensorAntiHor = node->sensor[SENSOR_ANTIHOR].state();
-}
-
-TrafficEvent TrafficManager::detectEvent(Node *node, TrafficContext &ctx)
-{
-
-    const TrafficState state = static_cast<TrafficState>(node->trafficState());
-
-    if (state == TrafficState::RESERVED)
-    {
-        if (!ctx.busy)
-            return TrafficEvent::NONE;
-
-        return TrafficEvent::BUSY_ON;
-    }
-
-    // if (ctx.busy && ctx.locoAddr > 1 && ctx.networkDirection == 0)
-    // {
-    //     if (ctx.sensorAntiHor && !ctx.sensorHoraire)
-    //     {
-    //         node->loco.sens(SENS_HORAIRE);
-    //         ctx.networkDirection = SENS_HORAIRE;
-    //         LOG_INFO("Sens reseau detecte : HORAIRE");
-    //     }
-    //     else if (ctx.sensorHoraire && !ctx.sensorAntiHor)
-    //     {
-    //         node->loco.sens(SENS_ANTIHOR);
-    //         ctx.networkDirection = SENS_ANTIHOR;
-    //         LOG_INFO("Sens reseau detecte : ANTIHOR");
-    //     }
-    // }
-
-    if (ctx.busy && ctx.locoAddr > 1 && ctx.networkDirection == SENS_INCONNU)
-    {
-        if (ctx.sensorAntiHor && !ctx.sensorHoraire)
-        {
-            node->loco.sens(SENS_HORAIRE);
-            ctx.networkDirection = SENS_HORAIRE;
-            LOG_INFO("Sens reseau detecte par capteur : HORAIRE");
-        }
-        else if (ctx.sensorHoraire && !ctx.sensorAntiHor)
-        {
-            node->loco.sens(SENS_ANTIHOR);
-            ctx.networkDirection = SENS_ANTIHOR;
-            LOG_INFO("Sens reseau detecte par capteur : ANTIHORAIRE");
-        }
-        else if (ctx.locoDirection == 1)
-        {
-            node->loco.sens(SENS_HORAIRE);
-            ctx.networkDirection = SENS_HORAIRE;
-            LOG_INFO("Sens reseau deduit de dir DCC : HORAIRE");
-        }
-        else if (ctx.locoDirection == 2)
-        {
-            node->loco.sens(SENS_ANTIHOR);
-            ctx.networkDirection = SENS_ANTIHOR;
-            LOG_INFO("Sens reseau deduit de dir DCC : ANTIHORAIRE");
-        }
-        else
-        {
-            LOG_INFO("Sens reseau impossible : H=%u AH=%u dir=%u",
-                     ctx.sensorHoraire,
-                     ctx.sensorAntiHor,
-                     ctx.locoDirection);
-        }
-    }
-
-    if (static_cast<TrafficState>(node->trafficState()) == TrafficState::STOPPED &&
-        ctx.busy &&
-        ctx.locoAddr > 1 &&
-        ctx.locoSpeed > 20)
-    {
-        // Même loco, même direction que celle qui venait vers le canton occupé :
-        // redémarrage interdit.
-        if (ctx.locoAddr == blockedAddr &&
-            ctx.locoDirection == blockedDccDirection)
-        {
-            return TrafficEvent::MANUAL_COMMAND_DANGEROUS;
-        }
-
-        // Direction inverse : autorisée.
-        return TrafficEvent::LOCO_IDENTIFIED;
-    }
-
-    if (!ctx.busy)
-        return TrafficEvent::BUSY_OFF;
-
-    if (ctx.locoAddr <= 1)
-        return TrafficEvent::BUSY_ON;
-
-    if (ctx.busy && ctx.locoAddr > 1)
-    {
-        uint8_t nextIdx = UNUSED_ID;
-
-        if (ctx.networkDirection == 1) // SENS_HORAIRE
-            nextIdx = node->SP1_idx();
-        else if (ctx.networkDirection == 2) // ANTI-HORAIRE
-            nextIdx = node->SM1_idx();
-
-        if (nextIdx != UNUSED_ID && node->nodeP[nextIdx] != nullptr)
-        {
-            if (
-                node->nodeP[nextIdx]->busy() ||
-                (node->nodeP[nextIdx]->reservedBy() > 1 &&
-                 node->nodeP[nextIdx]->reservedBy() != ctx.locoAddr))
-            {
-                LOG_INFO("Next canton reserveBy=%u", node->nodeP[nextIdx]->reservedBy());
-
-                // sens horaire : premier capteur = SENS_HORAIRE, second = SENS_ANTIHOR
-                if (ctx.networkDirection == 1)
-                {
-                    if (ctx.sensorAntiHor)
-                        return TrafficEvent::STOP_SENSOR;
-
-                    if (ctx.sensorHoraire)
-                        return TrafficEvent::BRAKE_SENSOR;
-                }
-
-                // sens anti-horaire : premier capteur = SENS_ANTIHOR, second = SENS_HORAIRE
-                if (ctx.networkDirection == 2)
-                {
-                    if (ctx.sensorHoraire)
-                        return TrafficEvent::STOP_SENSOR;
-
-                    if (ctx.sensorAntiHor)
-                        return TrafficEvent::BRAKE_SENSOR;
-                }
-                return TrafficEvent::NEXT_BUSY;
-            }
-        }
-    }
-
-    if (ctx.locoSpeed > ctx.maxSpeed && !speedClose(ctx.locoSpeed, ctx.maxSpeed))
-        return TrafficEvent::SPEED_ABOVE_LIMIT;
-
-    if (static_cast<TrafficState>(node->trafficState()) == TrafficState::SPEED_LIMITED &&
-        ctx.locoSpeed <= ctx.maxSpeed)
-    {
-        return TrafficEvent::SPEED_OK;
-    }
-
-    constexpr uint32_t RESERVATION_TIMEOUT_MS = 1500;
-
-    if (node->reservedBy() > 1 && !node->busy() &&
-        millis() - node->reservedAt() > RESERVATION_TIMEOUT_MS)
-    {
-        clearReservation(node);
-        node->trafficState((uint8_t)TrafficState::FREE);
-    }
-
-    return TrafficEvent::LOCO_IDENTIFIED;
-}
-
-void TrafficManager::handleState(Node *node, TrafficContext &ctx, TrafficEvent event)
-{
-    TrafficState oldState = static_cast<TrafficState>(node->trafficState());
-
-    if (event == TrafficEvent::BUSY_OFF)
-    {
-        node->sensor[SENSOR_HORAIRE].state(LOW);
-        node->sensor[SENSOR_ANTIHOR].state(LOW);
-
-        blockedAddr = 0;
-        blockedDccDirection = 0;
-        blockedNetworkDirection = 0;
-
-        node->loco.sens(0);
-        node->loco.speed(0);
-        node->loco.targetSpeed(1000);
-        node->loco.direction(0);
-        node->loco.address(1);
-
-        node->trafficState((uint8_t)TrafficState::FREE);
-        return;
-    }
-
-    if (!ctx.busy &&
-        static_cast<TrafficState>(node->trafficState()) != TrafficState::RESERVED)
-    {
-        node->trafficState((uint8_t)TrafficState::FREE);
-        return;
-    }
-
-    if (ctx.busy &&
-        static_cast<TrafficState>(node->trafficState()) == TrafficState::FREE)
-    {
-        if (ctx.locoAddr > 1)
-            node->trafficState((uint8_t)TrafficState::OCCUPIED_KNOWN);
-        else
-            node->trafficState((uint8_t)TrafficState::OCCUPIED_UNKNOWN);
-    }
-
-    switch (static_cast<TrafficState>(node->trafficState()))
-    {
-    case TrafficState::FREE:
-        if (event == TrafficEvent::LOCO_IDENTIFIED)
-            node->trafficState((uint8_t)TrafficState::RUNNING);
-        break;
-
-    case TrafficState::RUNNING:
-        if (ctx.networkDirection == 0)
-        {
-            node->trafficState((uint8_t)TrafficState::OCCUPIED_KNOWN);
-            LOG_INFO("RUNNING annule : sens reseau inconnu loco %u", ctx.locoAddr);
-            break;
-        }
-        if (event == TrafficEvent::SPEED_ABOVE_LIMIT)
-        {
-            if (commandSpeedIfNeeded(node, ctx.locoAddr, ctx.maxSpeed))
-            {
-                LOG_INFO("Ralentissement loco %u : %u -> %u",
-                         ctx.locoAddr, ctx.locoSpeed, ctx.maxSpeed);
-
-                node->trafficState((uint8_t)TrafficState::SPEED_LIMITED);
-            }
-        }
-        else if (event == TrafficEvent::BRAKE_SENSOR)
-        {
-            if (commandSpeedIfNeeded(node, ctx.locoAddr, 200))
-                LOG_INFO("Freinage loco %u : canton suivant occupe", ctx.locoAddr);
-
-            node->trafficState((uint8_t)TrafficState::SLOWING);
-        }
-        break;
-
-    case TrafficState::SLOWING:
-        if (event == TrafficEvent::STOP_SENSOR)
-        {
-            if (commandSpeedIfNeeded(node, ctx.locoAddr, 0))
-                LOG_INFO("Arret loco %u : canton suivant occupe", ctx.locoAddr);
-
-            blockedAddr = ctx.locoAddr;
-            blockedDccDirection = ctx.locoDirection; // 1=FWD, 2=REV
-            blockedNetworkDirection = ctx.networkDirection;
-
-            node->trafficState((uint8_t)TrafficState::STOPPING);
-        }
-        break;
-
-    case TrafficState::STOPPING:
-        if (speedClose(ctx.locoSpeed, 0))
-            node->trafficState((uint8_t)TrafficState::STOPPED);
-        break;
-
-    case TrafficState::STOPPED:
-        if (!ctx.busy)
-        {
-            node->trafficState((uint8_t)TrafficState::FREE);
-        }
-        else if (event == TrafficEvent::MANUAL_COMMAND_DANGEROUS)
-        {
-            if (forceStop(node, ctx.locoAddr))
-            {
-                LOG_INFO("Redemarrage interdit loco %u : canton suivant occupe", ctx.locoAddr);
-            }
-        }
-        break;
-
-    case TrafficState::OCCUPIED_UNKNOWN:
-        if (event == TrafficEvent::LOCO_IDENTIFIED)
-            node->trafficState((uint8_t)TrafficState::OCCUPIED_KNOWN);
-        break;
-
-    case TrafficState::OCCUPIED_KNOWN:
-        if (ctx.networkDirection != 0)
-        {
-            node->trafficState((uint8_t)TrafficState::RUNNING);
-        }
-        break;
-
-    case TrafficState::SPEED_LIMITED:
-        if (event == TrafficEvent::SPEED_OK)
-            node->trafficState((uint8_t)TrafficState::RUNNING);
-        break;
-
-    case TrafficState::RESERVED:
-    {
-        if (event == TrafficEvent::BUSY_ON)
-        {
-            const uint8_t sensReserve = node->reservedSens();
-
-            node->loco.address(node->reservedLoco.address());
-            node->loco.speed(node->reservedLoco.speed());
-            node->loco.direction(node->reservedLoco.direction());
-            node->loco.sens(sensReserve);
-
-            LOG_INFO("TRANSFERT reservation -> loco : addr=%u sensReserve=%s",
-                     node->loco.address(),
-                     sensName(node->loco.sens()));
-
-            clearReservation(node);
-            node->trafficState((uint8_t)TrafficState::OCCUPIED_KNOWN);
-        }
-        break;
-    }
-
-    default:
-        enterError(node, "Etat inconnu");
-        break;
-    }
-
-    TrafficState newState = static_cast<TrafficState>(node->trafficState());
-
-    if (oldState != newState)
-    {
-        LOG_INFO("TM transition %s + %s -> %s",
-                 stateName(oldState),
-                 eventName(event),
-                 stateName(newState));
-    }
-}
-
 void TrafficManager::signauxTask(void *p)
 {
     Node *node = (Node *)p;
@@ -608,39 +92,73 @@ void TrafficManager::signauxTask(void *p)
     }
 }
 
-void IRAM_ATTR TrafficManager::loopTask(void *pvParameters)
+void TrafficManager::loopTask(void *pvParameters)
 {
     Node *node = (Node *)pvParameters;
 
-    uint8_t index = 0;
-    bool sens0 = false;
-    bool sens1 = false;
-    bool s2access = false;
-    bool s2busy = false;
-
-    uint16_t oldLocoInfoRequestAddr = 0;
-    uint32_t lastLocoInfoRequestMs = 0;
+    uint32_t lastReservationSendMs = 0;
+    uint16_t lastReservationDestId = 0;
+    uint16_t lastReservationLocoAddr = 0;
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
-
-    TickType_t lastSignalChangeTime = xTaskGetTickCount();
+    // TickType_t xLastLocChangeTime = xTaskGetTickCount();
+    const TickType_t locoDelay = pdMS_TO_TICKS(1000);
+    TickType_t xLastSignalChangeTime[2] = {xTaskGetTickCount(), xTaskGetTickCount()};
     const TickType_t signalDelay = pdMS_TO_TICKS(1000);
+
+    bool oldBusy = node->busy();
 
     for (;;)
     {
+        node->reserved.refresh(); // MAJ des reservations
+
+        const bool currentBusy = node->busy();
+        const bool busyOn = !oldBusy && currentBusy;
+
+        if (busyOn)
+        {
+            if (node->loco.address() == 0 &&
+                node->reserved.reserved())
+            {
+                node->loco.address(
+                    node->reserved.reservedByLoco());
+
+                LOG_INFO("BUSY_ON : train %u identifié par réservation du satellite %u",
+                         node->loco.address(),
+                         node->reserved.reservedBySat());
+            }
+        }
 
         /*************************************************************************************
-         * Canton occupé : demande infos loco + sens de roulage
+         * Canton libre
          ************************************************************************************/
-
-        if (node->busy())
+        if (node->busy() == false)
         {
-            if (node->loco.address() > 1)
+            node->sensor[SENSOR_HORAIRE].state(LOW); // Desactivation des capteurs ponctuels si aucune loco reconnue
+            node->sensor[SENSOR_ANTIHOR].state(LOW);
+            node->loco.address(0);                     // Reset de l'adresse
+            node->loco.speed(0);                       // ... de la vitesse ...
+            node->loco.oldSpeed(0);                    // ... de la précédente vitesse ...
+            node->loco.networkDirection(SENS_INCONNU); // ... de la direction ...
+            node->loco.envoiSpeedCmd(false);           // ... répétition de commande ...
+            node->loco.railMode(0);                    // ... du mode d'alimentation.
+        }
+
+        /*************************************************************************************
+         * Canton occupé
+         ************************************************************************************/
+        else
+        /*************************************************************************************
+         * Demande infos locomotive + direction réseau
+         ************************************************************************************/
+        {
+            if (node->loco.address() > 0)
             {
                 const uint16_t addr = node->loco.address();
                 const uint32_t nowMs = millis();
+                static uint32_t lastLocoInfoRequestMs = 0;
 
-                if (addr != oldLocoInfoRequestAddr || nowMs - lastLocoInfoRequestMs > 1000)
+                if (nowMs - lastLocoInfoRequestMs > locoDelay)
                 {
                     CanMsg::sendMsg(1, 0xAB, 0, node->ID(),
                                     0x00,
@@ -648,29 +166,24 @@ void IRAM_ATTR TrafficManager::loopTask(void *pvParameters)
                                     (uint8_t)(0xC0 | ((addr >> 8) & 0x3F)),
                                     (uint8_t)(addr & 0xFF));
 
-                    oldLocoInfoRequestAddr = addr;
                     lastLocoInfoRequestMs = nowMs;
                 }
             }
 
-            // if (node->sensor[SENSOR_HORAIRE].state() && !node->sensor[SENSOR_ANTIHOR].state())
-            //     node->loco.sens(1);
-
-            // if (node->sensor[SENSOR_ANTIHOR].state() && !node->sensor[SENSOR_HORAIRE].state())
-            //     node->loco.sens(2);
-        }
-
-        if (node->reservedBy() > 1 && !node->busy() && millis() - node->reservedAt() > 1500)
-        {
-            LOG_INFO("Reservation expiree loco %u", node->reservedBy());
-            clearReservation(node);
+            /*************************************************************************************
+             * Adaptation de la vitesse de la locomotive au canton
+             ************************************************************************************/
+            if (node->loco.speed() > node->maxSpeed())
+            {
+                node->loco.speed(node->maxSpeed());
+            }
         }
 
         /*************************************************************************************
          * Recherche SP1 / SM1
          ************************************************************************************/
 
-        auto rechercheSat = [node](bool satPos) -> uint8_t
+        auto searchSat = [node](bool satPos) -> uint8_t
         {
             uint8_t idxA = 0;
             uint8_t idxS = 0;
@@ -683,250 +196,188 @@ void IRAM_ATTR TrafficManager::loopTask(void *pvParameters)
 
             uint8_t idx = idxS;
 
-            if (node->aig[0 + idxA] != nullptr)
+            if (node->aig[0 + idxA] != nullptr) // aiguille 0 ou 3
             {
-                if (node->aig[0 + idxA]->estDroit())
+                if (node->aig[0 + idxA]->estDroit()) // aiguille 0 ou 3 droite
                 {
-                    idx = 0 + idxS;
-
-                    if (node->aig[1 + idxA] != nullptr)
+                    // p00 ou m00
+                    idx = 0 + idxS;                     // idx = 0 ou 4
+                    if (node->aig[1 + idxA] != nullptr) // aiguille 1 ou 4
                     {
-                        if (!node->aig[1 + idxA]->estDroit())
-                            idx = 0 + idxS;
-                        else
-                            idx = 1 + idxS;
+                        // p10 ou m10
+                        if (!node->aig[1 + idxA]->estDroit()) // aiguille 1 ou 4 déviée
+                            idx = 2 + idxS;                   // idx = 2 ou 6
                     }
                 }
-                else
+                else // aiguille 0 ou 3 déviéé
                 {
-                    idx = 1 + idxS;
-
-                    if (node->aig[2 + idxA] != nullptr)
+                    // p01 ou m01
+                    idx = 1 + idxS;                     // idx = 1 ou 5
+                    if (node->aig[2 + idxA] != nullptr) // aiguille 2 ou 5
                     {
-                        if (node->aig[2 + idxA]->estDroit())
-                            idx = 2 + idxS;
-                        else
-                            idx = 3 + idxS;
+                        if (!node->aig[2 + idxA]->estDroit())
+                            idx = 3 + idxS; // idx = 3 ou 7
                     }
                 }
             }
-
             return idx;
         };
-
-        node->SP1_idx(rechercheSat(0)); // côté horaire / SP
-        node->SM1_idx(rechercheSat(1)); // côté anti-horaire / SM
-
-        TrafficContext ctx;
-        readContext(node, ctx);
-
-        TrafficEvent event = detectEvent(node, ctx);
-        ////////////////////////////////////////////////
-        uint8_t sp1Idx = node->SP1_idx();
-        uint8_t sm1Idx = node->SM1_idx();
-
-        uint16_t sp1Id = 0;
-        uint16_t sm1Id = 0;
-
-        if (sp1Idx != UNUSED_ID && node->nodeP[sp1Idx] != nullptr)
-            sp1Id = node->nodeP[sp1Idx]->ID();
-
-        if (sm1Idx != UNUSED_ID && node->nodeP[sm1Idx] != nullptr)
-            sm1Id = node->nodeP[sm1Idx]->ID();
-
-        // LOG_INFO("TM ctx state=%s event=%s busy=%u addr=%u speed=%u target=%u sens=%u dir=%u max=%u H=%u AH=%u SP1_idx=%u SP1_id=%u SM1_idx=%u SM1_id=%u",
-        //          stateName((TrafficState)node->trafficState()),
-        //          eventName(event),
-        //          ctx.busy,
-        //          ctx.locoAddr,
-        //          ctx.locoSpeed,
-        //          node->loco.targetSpeed(),
-        //          ctx.networkDirection,
-        //          ctx.locoDirection,
-        //          ctx.maxSpeed,
-        //          ctx.sensorHoraire,
-        //          ctx.sensorAntiHor,
-        //          sp1Idx,
-        //          sp1Id,
-        //          sm1Idx,
-        //          sm1Id);
-        TrafficState state = static_cast<TrafficState>(node->trafficState());
-        LOG_INFO(
-            "TM ctx state=%s event=%s "
-            "busy=%u "
-            "addr=%u speed=%u target=%u sens=%u dir=%u "
-            "reservedAddr=%u reservedSpeed=%u reservedDir=%u "
-            "reservedBy=%u reservedSens=%u "
-            "max=%u H=%u AH=%u "
-            "SP1_idx=%u SP1_id=%u "
-            "SM1_idx=%u SM1_id=%u",
-
-            stateName(state),
-            eventName(event),
-
-            ctx.busy,
-
-            node->loco.address(),
-            node->loco.speed(),
-            node->loco.targetSpeed(),
-            node->loco.sens(),
-            node->loco.direction(),
-
-            node->reservedLoco.address(),
-            node->reservedLoco.speed(),
-            node->reservedLoco.direction(),
-
-            node->reservedBy(),
-            node->reservedSens(),
-
-            ctx.maxSpeed,
-            ctx.sensorHoraire,
-            ctx.sensorAntiHor,
-
-            node->SP1_idx(),
-            node->SP1_idx() != UNUSED_ID ? node->nodeP[node->SP1_idx()]->ID() : 0,
-
-            node->SM1_idx(),
-            node->SM1_idx() != UNUSED_ID ? node->nodeP[node->SM1_idx()]->ID() : 0);
-
-        //////////////////////////////////////////////////////////////////////////////////
-
-        handleState(node, ctx, event);
 
         /*************************************************************************************
          * Envoi état du satellite
          ************************************************************************************/
 
-        if (node->nodeP[node->SP1_idx()] != nullptr &&
-            node->nodeP[node->SM1_idx()] != nullptr)
+        // Pour ce satellite, on recherche quel sont les cantons SP1 et SM1
+        // en fonction de la position des aiguilles
+        auto *sp1 = node->nodeP[searchSat(0)]; // côté horaire
+        auto *sm1 = node->nodeP[searchSat(1)]; // côté anti-horaire
+
+        node->SP1 = sp1;
+        node->SM1 = sm1;
+
+        uint8_t etats = 0;
+        etats |= ((uint8_t)node->busy() << 0);
+        etats |= ((uint8_t)node->reserved.reserved() << 1);
+        if (sp1 != nullptr)
         {
-            CanMsg::sendMsg(1, 0xE0, 0, node->ID(),
-                            node->busy(),
-                            (uint8_t)node->nodeP[node->SP1_idx()]->ID(),
-                            (uint8_t)node->nodeP[node->SM1_idx()]->ID(),
-                            node->nodeP[node->SP1_idx()]->acces(),
-                            node->nodeP[node->SP1_idx()]->busy(),
-                            node->nodeP[node->SM1_idx()]->acces(),
-                            node->nodeP[node->SM1_idx()]->busy());
+            etats |= ((uint8_t)sp1->busy() << 2);
+            etats |= ((uint8_t)sp1->acces() << 3);
         }
+        if (sm1 != nullptr)
+        {
+            etats |= ((uint8_t)sm1->busy() << 4);
+            etats |= ((uint8_t)sm1->acces() << 5);
+        }
+
+        const uint16_t sp1Id = (sp1 != nullptr) ? sp1->ID() : 0;
+        const uint16_t sm1Id = (sm1 != nullptr) ? sm1->ID() : 0;
+
+        const uint16_t addr =
+            node->busy() ? node->loco.address() : 0;
+
+        CanMsg::sendMsg(1, 0x40, 0, node->ID(),
+                        (uint8_t)(sp1Id >> 8),
+                        (uint8_t)(sp1Id & 0xFF),
+                        (uint8_t)(sm1Id >> 8),
+                        (uint8_t)(sm1Id & 0xFF),
+                        etats,
+                        (uint8_t)(addr >> 8),
+                        (uint8_t)(addr & 0xFF));
 
         /*************************************************************************************
          * Réservation du canton suivant
          ************************************************************************************/
 
-        if (node->busy() && node->loco.address() > 1)
+        if (node->busy() && node->loco.address() > 0)
         {
-            uint8_t nodeIdx = UNUSED_ID;
-            // switch (1)
-            switch (node->loco.sens())
+            const uint8_t networkDirection = node->loco.networkDirection();
+
+            if (networkDirection != SENS_INCONNU)
             {
-            case 1:
-                nodeIdx = node->SP1_idx();
-                break;
-            case 2:
-                nodeIdx = node->SM1_idx();
-                break;
-            default:
-                break;
-            }
+                NodePeriph *nodeDest =
+                    (networkDirection == SENS_HORAIRE) ? node->SP1 : node->SM1;
 
-            LOG_INFO("Reservation check sens=%u SP1_idx=%u SM1_idx=%u nodeIdx=%u addr=%u",
-                     node->loco.sens(),
-                     node->SP1_idx(),
-                     node->SM1_idx(),
-                     nodeIdx,
-                     node->loco.address());
-
-            if (nodeIdx != UNUSED_ID && node->nodeP[nodeIdx] != nullptr)
-            {
-                const uint16_t addr = node->loco.address();
-
-                uint8_t reservedSens = SENS_INCONNU;
-
-                if (nodeIdx == node->SP1_idx())
+                if (nodeDest != nullptr && nodeDest->ID() != 0)
                 {
-                    reservedSens = SENS_HORAIRE;
-                }
-                else if (nodeIdx == node->SM1_idx())
-                {
-                    reservedSens = SENS_ANTIHOR;
-                }
-                else
-                {
-                    LOG_ERROR("Reservation impossible : nodeIdx incoherent=%u", nodeIdx);
-                    return;
-                }
+                    const uint32_t nowMs = millis();
+                    const uint16_t destId = nodeDest->ID();
+                    const uint16_t locoAddr = node->loco.address();
 
-                CanMsg::sendMsg(1, 0xE3, 0, node->ID(),
-                                (uint8_t)node->nodeP[nodeIdx]->ID(),
-                                (uint8_t)((addr >> 8) & 0xFF),
-                                (uint8_t)(addr & 0xFF),
-                                reservedSens);
+                    // Envoi immédiat si la destination ou la loco change.
+                    const bool changed =
+                        destId != lastReservationDestId ||
+                        locoAddr != lastReservationLocoAddr;
 
-                LOG_INFO("Envoi reservation 0xE3 target=%u loco=%u sensReserve=%s",
-                         node->nodeP[nodeIdx]->ID(),
-                         addr,
-                         sensName(reservedSens));
+                    // Sinon renouvellement toutes les secondes.
+                    if (changed ||
+                        (uint32_t)(nowMs - lastReservationSendMs) >= reservationSendDelayMs)
+                    {
+                        CanMsg::sendMsg(
+                            1, 0x41, 0, node->ID(),
+                            (uint8_t)(destId >> 8),
+                            (uint8_t)(destId & 0xFF),
+                            (uint8_t)(locoAddr >> 8),
+                            (uint8_t)(locoAddr & 0xFF));
+
+                        lastReservationSendMs = nowMs;
+                        lastReservationDestId = destId;
+                        lastReservationLocoAddr = locoAddr;
+                    }
+                }
             }
         }
+        else
+        {
+            // Permettra un nouvel envoi immédiat lors de la prochaine apparition d'un train.
+            lastReservationDestId = 0;
+            lastReservationLocoAddr = 0;
+        }
 
-        /*************************************************************************************
-         * Signalisation
-         ************************************************************************************/
+        // /*************************************************************************************
+        //  * Signalisation
+        //  ************************************************************************************/
+
+        // ---- Etape 1 : calcul de signalValue[0] (horaire) et signalValue[1] (anti-horaire) ----
 
         for (uint8_t i = 0; i < 2; i++)
         {
-            const char *cantonName0 = "";
-            const char *cantonName1 = "";
+            NodePeriph *sat1 = (i == 0) ? node->SP1 : node->SM1;
+            NodePeriph *sat2 = (i == 0) ? node->SP2 : node->SM2;
 
-            s2busy = false;
-            s2access = false;
-
-            switch (i)
+            if (sat1 != nullptr && sat1->ID() > 0)
             {
-            case 0:
-                index = node->SP1_idx();
-                sens0 = SENS_HORAIRE;
-                sens1 = SENS_ANTIHOR;
-                s2access = node->SP2_acces();
-                s2busy = node->SP2_busy();
-                cantonName0 = "SP1";
-                cantonName1 = "SP2";
-                break;
+                const uint16_t myAddr = node->loco.address();
 
-            case 1:
-                index = node->SM1_idx();
-                sens0 = SENS_ANTIHOR;
-                sens1 = SENS_HORAIRE;
-                s2access = node->SM2_acces();
-                s2busy = node->SM2_busy();
-                cantonName0 = "SM1";
-                cantonName1 = "SM2";
-                break;
-            }
+                // Le canton suivant est BUSY, mais c'est mon propre train
+                // qui l'occupe déjà.
+                const bool busyByMyTrain =
+                    sat1->busy() &&
+                    myAddr > 0 &&
+                    sat1->locoAddr() == myAddr;
 
-            if (node->nodeP[index] != nullptr)
-            {
-                if (node->nodeP[index]->acces())
+                // Le canton suivant est réservé par mon satellite
+                // pour ma locomotive.
+                const bool reservedForMe =
+                    sat1->reservedFor(node->ID(), myAddr);
+
+                /*
+                 * Règles :
+                 *
+                 * BUSY par mon propre train     -> autorisé
+                 * BUSY par un autre train       -> interdit
+                 * FREE réservé pour moi         -> autorisé
+                 * FREE réservé pour un autre    -> interdit
+                 * FREE non réservé              -> autorisé
+                 */
+                bool accessForbidden = false;
+
+                if (sat1->busy())
                 {
-                    const bool nextBusy = node->nodeP[index]->busy();
+                    accessForbidden = !busyByMyTrain;
+                }
+                else if (sat1->reserved())
+                {
+                    accessForbidden = !reservedForMe;
+                }
 
-                    const bool nextReservedByOther =
-                        node->nodeP[index]->reservedBy() > 1 &&
-                        node->nodeP[index]->reservedBy() != node->loco.address();
-
-                    if (nextBusy || nextReservedByOther)
+                if (sat1->acces())
+                {
+                    if (accessForbidden)
                     {
-                        signalValue[i] = SIGNAL_ROUGE;
+                        signalValue[i] = SIGNAL_CARRE;
                     }
                     else
                     {
                         signalValue[i] = SIGNAL_VERT;
 
-                        if (s2access)
-                            signalValue[i] = s2busy ? SIGNAL_ORANGE : SIGNAL_VERT;
-                        else
-                            signalValue[i] = SIGNAL_ORANGE;
+                        if (sat2 != nullptr && sat2->ID() > 0)
+                        {
+                            if (sat2->acces())
+                                signalValue[i] =
+                                    sat2->busy() ? SIGNAL_ORANGE : SIGNAL_VERT;
+                            else
+                                signalValue[i] = SIGNAL_ORANGE;
+                        }
                     }
                 }
                 else
@@ -938,23 +389,24 @@ void IRAM_ATTR TrafficManager::loopTask(void *pvParameters)
             {
                 signalValue[i] = SIGNAL_CARRE;
             }
+        }
 
-            static uint16_t oldSignalValue0 = 0xFFFF;
-            static uint16_t oldSignalValue1 = 0xFFFF;
+        // ---- Etape 2 : détection de changement, un "old" et un temporisateur PAR DIRECTION ----
+        static uint16_t oldSignalValue[2] = {0xFFFF, 0xFFFF};
 
-            if (signalValue[0] != oldSignalValue0)
+        for (uint8_t i = 0; i < 2; i++)
+        {
+            if (signalValue[i] != oldSignalValue[i])
             {
-                lastSignalChangeTime = xTaskGetTickCount();
-                oldSignalValue0 = signalValue[0];
+                xLastSignalChangeTime[i] = xTaskGetTickCount();
+                oldSignalValue[i] = signalValue[i];
             }
+        }
 
-            if (signalValue[1] != oldSignalValue1)
-            {
-                lastSignalChangeTime = xTaskGetTickCount();
-                oldSignalValue1 = signalValue[1];
-            }
-
-            if (xTaskGetTickCount() - lastSignalChangeTime > signalDelay)
+        // ---- Etape 3 : décision arrêt/ralentissement, indépendante par direction ----
+        for (uint8_t i = 0; i < 2; i++)
+        {
+            if (xTaskGetTickCount() - xLastSignalChangeTime[i] > signalDelay)
             {
                 const bool signalArret =
                     (signalValue[i] == SIGNAL_CARRE || signalValue[i] == SIGNAL_ROUGE);
@@ -965,39 +417,59 @@ void IRAM_ATTR TrafficManager::loopTask(void *pvParameters)
 
                 if (signalArret)
                 {
-                    if (node->loco.sens() == 1) // SENS_HORAIRE
+                    if (node->loco.networkDirection() == SENS_HORAIRE)
                     {
-                        if (node->sensor[SENSOR_HORAIRE].state())
-                            node->loco.speed(200);
-
                         if (node->sensor[SENSOR_ANTIHOR].state())
+                            node->loco.sRalenti();
+                        if (node->sensor[SENSOR_HORAIRE].state())
                             node->loco.stop();
                     }
-                    else if (node->loco.sens() == 2) // ANTI-HORAIRE
+                    else if (node->loco.networkDirection() == SENS_ANTIHOR)
                     {
-                        if (node->sensor[SENSOR_ANTIHOR].state())
-                            node->loco.speed(200);
-
                         if (node->sensor[SENSOR_HORAIRE].state())
+                            node->loco.sRalenti();
+                        if (node->sensor[SENSOR_ANTIHOR].state())
                             node->loco.stop();
                     }
                 }
                 else if (signalRalenti)
                 {
-                    if (node->loco.sens() == 1) // SENS_HORAIRE
+                    if (node->loco.networkDirection() == SENS_HORAIRE)
                     {
-                        if (node->sensor[SENSOR_HORAIRE].state() && node->loco.speed() > 200)
-                            node->loco.speed(200);
+                        if (node->sensor[SENSOR_ANTIHOR].state() && node->loco.speed() > node->loco.gRalenti())
+                            node->loco.sRalenti();
                     }
-                    else if (node->loco.sens() == 2) // ANTI-HORAIRE
+                    else if (node->loco.networkDirection() == SENS_ANTIHOR)
                     {
-                        if (node->sensor[SENSOR_ANTIHOR].state() && node->loco.speed() > 200)
-                            node->loco.speed(200);
+                        if (node->sensor[SENSOR_HORAIRE].state() && node->loco.speed() > node->loco.gRalenti())
+                            node->loco.sRalenti();
                     }
                 }
             }
         }
+        // /*************************************************************************************
+        //  * Envoie des commandes de vitesse à la centrale
+        //  ************************************************************************************/
 
+        if (node->loco.address() > 0)
+        {
+            if (node->loco.envoiSpeedCmd())
+            {                                                    // Message à la centrale DCC++
+                const uint16_t cappedSpeed = node->loco.speed(); // valeur réellement stockée, post-transformation
+                const uint16_t addr = node->loco.address();
+                CanMsg::sendMsg(0, 0x04, 0, node->ID(),
+                                0x00,
+                                0x00,
+                                (uint8_t)(0xC0 | ((addr >> 8) & 0x3F)),
+                                (uint8_t)(addr & 0xFF),
+                                (uint8_t)((cappedSpeed >> 8) & 0xFF),
+                                (uint8_t)(cappedSpeed & 0xFF));
+                // #ifdef debug
+                //                 debug.printf("[GestionReseau %d] Loco %d vitesse %d\n", __LINE__, node->loco.address(), node->loco.speed());
+                // #endif
+            }
+        }
+        oldBusy = currentBusy;
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100));
     }
 }

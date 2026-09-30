@@ -17,11 +17,11 @@
 
 byte Discovery::m_switchAig{0};
 byte Discovery::m_btnState{0};
-byte Discovery::m_ID_satPeriph{UNUSED_ID};
+uint16_t Discovery::m_ID_satPeriph{0};
 byte Discovery::m_comptAig{0};
 bool Discovery::m_stopProcess{false};
 
-void Discovery::ID_satPeriph(byte val) { m_ID_satPeriph = val; }
+void Discovery::ID_satPeriph(uint16_t val) { m_ID_satPeriph = val; }
 byte Discovery::ID_satPeriph() { return m_ID_satPeriph; }
 void Discovery::comptAig(byte val) { m_comptAig = val; }
 byte Discovery::comptAig() { return m_comptAig; }
@@ -76,7 +76,7 @@ void Discovery::process(void *p)
   auto btnPush = [&](uint8_t btnNum)
   {
     // Envoi sur le bus CAN de l'ID du satellite, commande 0xC0
-    CanMsg::sendMsg(0, 0xC0, 0, node->ID(), UNUSED_ID, 0);
+    CanMsg::sendMsg(0, 0xC0, false, node->ID(), (uint8_t)0 >> 8, (uint8_t)0 & 0xFF,0);
 
     if (m_ID_satPeriph < 253)
     {
@@ -84,7 +84,7 @@ void Discovery::process(void *p)
         node->nodeP[btnNum] = new NodePeriph;
       node->nodeP[btnNum]->ID(m_ID_satPeriph);
       allumerLED();
-      m_ID_satPeriph = UNUSED_ID;
+      m_ID_satPeriph = 0;
     }
     else
       clignoterLED();
@@ -160,7 +160,7 @@ void Discovery::process(void *p)
       break;
     }
     // debug.printf("[Discovery %d] : process runing\n", __LINE__);
-    CanMsg::sendMsg(0, 0xC1, 0, node->ID(), UNUSED_ID, 0, node->masqueAig()); // Envoi du masqueAig sur le bus CAN
+    CanMsg::sendMsg(0, 0xC1, false, node->ID(), (uint8_t)0 >> 8, (uint8_t)0 & 0xFF, 0, node->masqueAig()); // Envoi du masqueAig sur le bus CAN
     if (m_stopProcess)
     {
       vTaskDelete(NULL);

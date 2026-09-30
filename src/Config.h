@@ -43,11 +43,11 @@ enum : uint8_t // Index des satellites périphériques
 //#define TEST_MEMORY_TASK
 
 /* ----- ID sur le bus CAN -----------------------*/
-#define CENTRALE_DCC_ID 253 // Identifiant centrale dcc sur bus CAN
-#define UNUSED_ID 255           // Pour designer un noeud non identifier sur bus CAN   
+#define CENTRALE_DCC_ID 253        // Identifiant centrale dcc sur bus CAN
+//#define UNUSED_ID 0xFFFF           // Pour designer un noeud non identifié sur bus CAN   
 
 /* ----- Broches ESP32 -----------------------*/
-#define UNUSED_PIN 255          // Pour désigner une broche sans affectation
+#define UNUSED_PIN 0xFF          // Pour désigner une broche sans affectation
 
 /* ----- CAN ----------------------*/
 #define CAN_RX GPIO_NUM_22
@@ -60,15 +60,21 @@ const uint8_t aigSize = 6;
 const uint8_t sensorSize = 2;
 const uint8_t signalSize = 2;
 
+const uint32_t reservationSendDelayMs = 1000UL; // Délai entre 2 réservations
+const uint32_t refreshDelayMs = 5000UL; // Délai de rafraichissement des réservation 5 sec
+
 /* ----- Railcom -------------------*/
-#define NB_ADDRESS_TO_COMPARE 20 // Nombre de valeurs à comparer pour obtenir l'adresse de la loco
 #define RAILCOM_RX GPIO_NUM_0
+
+#define NB_ADDRESS_TO_COMPARE 20
 #define RAILCOM_TX GPIO_NUM_17
 
 /* ----- Sensors ------------------*/
 #define CAPT_PONCT_HORAIRE_PIN GPIO_NUM_15
-#define CAPT_PONCT_ANTIHOR_PIN GPIO_NUM_14
+#define CAPT_PONCT_ANTIHOR_PIN GPIO_NUM_12
 #define CAPT_PONCT_TEMPO 5UL
+static constexpr uint8_t SENSOR_ANTIHOR = 0;
+static constexpr uint8_t SENSOR_HORAIRE = 1;
 
 /* ----- Détection présence ---------*/
 #define CONSO_COURANT_PIN GPIO_NUM_33 // 

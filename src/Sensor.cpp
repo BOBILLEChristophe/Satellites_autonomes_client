@@ -19,7 +19,7 @@ void Sensor::setup(gpio_num_t pin, uint32_t tempo, byte input)
   xTaskCreate(this->loop, "loop", 2 * 1024, this, 10, NULL);
 }
 
-void IRAM_ATTR Sensor::loop(void *p)
+void Sensor::loop(void *p)
 {
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
@@ -31,7 +31,7 @@ void IRAM_ATTR Sensor::loop(void *p)
       pThis->m_state = !digitalRead(pThis->m_pin);
 
 #ifdef debug
-      //debug.printf("[Sensor %d] Le capteur %d est  %d\n", __LINE__, pThis->m_pin, pThis->m_state);
+     //debug.printf("[Sensor %d] Le capteur %d est  %d\n", __LINE__, pThis->m_pin, pThis->m_state);
 #endif
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(pThis->m_tempo)); // toutes les x ms
   }

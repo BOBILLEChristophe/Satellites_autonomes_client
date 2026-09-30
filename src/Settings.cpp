@@ -8,7 +8,8 @@
 #include "Settings.h"
 
 bool Settings::WIFI_ON = true;
-bool Settings::DISCOVERY_ON = true;
+bool Settings::OTA_ON = false;
+bool Settings::DISCOVERY_ON = false;
 String Settings::ssid_str;
 String Settings::password_str;
 char Settings::ssid[30] = {};
@@ -26,6 +27,11 @@ bool Settings::wifiOn() { return WIFI_ON; }
 void Settings::wifiOn(bool val)
 {
   Settings::WIFI_ON = val;
+}
+bool Settings::otaOn() { return OTA_ON; }
+void Settings::otaOn(bool val)
+{
+  Settings::OTA_ON = val;
 }
 
 /*-------------------------------------------------------------
@@ -48,28 +54,28 @@ bool Settings::begin()
   uint8_t countReset = 1;
   do
   {
-    CanMsg::sendMsg(1, 0xB2, 0, node->ID());
+    CanMsg::sendMsg(1, 0xB2, false, node->ID());
     vTaskDelay(pdMS_TO_TICKS(1000));
     LOG_INFO("Connexion CAN avec la carte Main %d/10", countReset);
     if (countReset++ == 10)
     {
       LOG_ERROR("Echec de la connexion CAN avec la carte Main");
       LOG_ERROR("Redemarrage dans 5 secondes");
-      delay(5000);
+       delay(5000);
       esp_restart();
     }
   } while (!isMainReady);
 
   // Identifiant du Node
-  if (node->ID() == UNUSED_ID)
+  if (node->ID() == 0)
     LOG_ERROR("Le satellite ne possède pas d'identifiant");
 
-  while (UNUSED_ID == node->ID()) // L'identifiant n'est pas en mémoire
+  while (0 == node->ID()) // L'identifiant n'est pas en mémoire
   {
     //--- Requete identifiant
-    CanMsg::sendMsg(1, 0xB3, 0, node->ID());
+    CanMsg::sendMsg(1, 0xB3, false, node->ID());
     vTaskDelay(pdMS_TO_TICKS(1000));
-    if (node->ID() != UNUSED_ID)
+    if (node->ID() != 0)
       writeFile(); // Sauvegarde de donnees en flash
     else
       LOG_INFO(".");
@@ -119,12 +125,13 @@ void Settings::readFile()
     return;
   }
   // ---
-  node->ID(doc["idNode"] | UNUSED_ID);
+  node->ID(doc["idNode"] | 0);
   LOG_INFO("- ID node : %d", node->ID());
 
   Discovery::comptAig(doc["comptAig"]);
   node->masqueAig(doc["masqueAig"]);
   WIFI_ON = doc["wifi_on"];
+  OTA_ON = doc["ota_on"];
   DISCOVERY_ON = doc["discovery_on"];
   ssid_str = doc["ssid"].as<String>();
   password_str = doc["password"].as<String>();
@@ -133,7 +140,7 @@ void Settings::readFile()
   uint16_t maxSpeed = doc["maxSpeed"];
   node->maxSpeed(maxSpeed);
   LOG_INFO("- node->maxSpeed : %d\n", node->maxSpeed());
-  node->sensMarche(doc["sensMarche"]);
+  //node->sensMarche(doc["sensMarche"]);
 
   // Nœuds
   const char *index[] = {"p00", "p01", "p10", "p11", "m00", "m01", "m10", "m11"};
@@ -203,11 +210,12 @@ void Settings::writeFile()
   doc["comptAig"] = Discovery::comptAig();
   doc["masqueAig"] = node->masqueAig();
   doc["wifi_on"] = WIFI_ON;
+  doc["ota_on"] = OTA_ON;
   doc["discovery_on"] = DISCOVERY_ON;
   doc["ssid"] = ssid;
   doc["password"] = password;
   doc["maxSpeed"] = node->maxSpeed();
-  doc["sensMarche"] = node->sensMarche();
+  //doc["sensMarche"] = node->sensMarche();
 
   // Nœuds
   const String index[] = {"p00", "p01", "p10", "p11", "m00", "m01", "m10", "m11"};

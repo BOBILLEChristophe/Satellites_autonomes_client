@@ -22,10 +22,10 @@ static inline const char* baseName(const char* path) {
 #endif
 
 // Niveaux (plus grand = plus verbeux)
-#define LOG_LEVEL_INFO   1
+#define LOG_LEVEL_ERROR  1
 #define LOG_LEVEL_WARN   2
-#define LOG_LEVEL_DEBUG  3
-#define LOG_LEVEL_ERROR  4
+#define LOG_LEVEL_INFO   3
+#define LOG_LEVEL_DEBUG  4
 
 #ifndef LOG_LEVEL
   #define LOG_LEVEL LOG_LEVEL_DEBUG

@@ -23,7 +23,7 @@ private:
   static const gpio_num_t m_aigPin[];
   static Node *node;
   static byte m_comptAig;
-  static byte m_ID_satPeriph;
+  static uint16_t m_ID_satPeriph;
   static byte m_btnState;
   static bool m_stopProcess;
 
@@ -34,7 +34,7 @@ public:
   static void createAigEtCibles(void *);
   static void comptAig(byte);
   static byte comptAig();
-  static void ID_satPeriph(byte);
+  static void ID_satPeriph(uint16_t);
   static byte ID_satPeriph();
   static void btnState(byte);
   static byte btnState();

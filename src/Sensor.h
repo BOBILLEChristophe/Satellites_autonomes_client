@@ -24,7 +24,7 @@ public:
   Sensor();
   ~Sensor();
   void setup(gpio_num_t, uint32_t, byte);
-  static void IRAM_ATTR loop(void *);
+  static void loop(void *);
   bool state();
   void state(bool);
 };

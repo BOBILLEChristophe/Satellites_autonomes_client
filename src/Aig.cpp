@@ -121,7 +121,6 @@ void Aig::taskGoTo(void *p)
       a->run(false);
       continue;
     }
-
     delayMicroseconds(a->m_speed);
   }
 }
